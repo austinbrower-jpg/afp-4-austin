@@ -1,7 +1,8 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
-import { CheckCircle2, CircleDashed, Cloud, RefreshCw } from "lucide-react";
+import { CheckCircle2, CircleDashed, Cloud, Plug, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import {
   Card,
   CardAction,
@@ -16,6 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   useSyncStatus,
+  useTestNotionConnection,
   useTriggerSync,
 } from "@/features/notion-sync/hooks/use-sync-status";
 import type { SyncEntityType } from "@/types/domain";
@@ -43,6 +45,26 @@ const ENV_VAR_ORDER = [
 export function NotionConnectionCard() {
   const { data: status, isLoading } = useSyncStatus();
   const { mutate: triggerSync, isPending } = useTriggerSync();
+  const { mutate: testConnection, isPending: isTesting } = useTestNotionConnection();
+
+  const handleTestConnection = () => {
+    testConnection(undefined, {
+      onSuccess: (result) => {
+        if (result.ok) {
+          toast.success(
+            result.workspaceName
+              ? `Connected to "${result.workspaceName}"`
+              : "Notion connection is valid",
+          );
+        } else {
+          toast.error(result.error ?? "Notion connection test failed");
+        }
+      },
+      onError: (err) => {
+        toast.error(err instanceof Error ? err.message : "Notion connection test failed");
+      },
+    });
+  };
 
   if (isLoading || !status) {
     return (
@@ -119,14 +141,24 @@ export function NotionConnectionCard() {
             </p>
             <p>Sync interval: every {status.syncIntervalMinutes} min</p>
           </div>
-          <Button
-            variant="outline"
-            disabled={isPending}
-            onClick={() => triggerSync("manual")}
-          >
-            <RefreshCw className={`size-3.5 ${isPending ? "animate-spin" : ""}`} />
-            Sync now
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              disabled={isTesting}
+              onClick={handleTestConnection}
+            >
+              <Plug className={`size-3.5 ${isTesting ? "animate-pulse" : ""}`} />
+              Test connection
+            </Button>
+            <Button
+              variant="outline"
+              disabled={isPending}
+              onClick={() => triggerSync("manual")}
+            >
+              <RefreshCw className={`size-3.5 ${isPending ? "animate-spin" : ""}`} />
+              Sync now
+            </Button>
+          </div>
         </div>
 
         {!status.configured && (

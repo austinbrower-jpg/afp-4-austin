@@ -16,6 +16,14 @@ export interface SyncTriggerResponse {
   status: SyncStatusSummary;
 }
 
+export interface NotionConnectionTestResult {
+  ok: boolean;
+  configured: boolean;
+  botId?: string;
+  workspaceName?: string;
+  error?: string;
+}
+
 export const notionSyncApi = {
   status: () => apiGet<SyncStatusSummary>("/api/notion/status"),
   triggerSync: (trigger: SyncLogEntry["trigger"] = "manual") =>
@@ -23,4 +31,5 @@ export const notionSyncApi = {
   listConflicts: () => apiGet<SyncConflict[]>("/api/notion/conflicts"),
   resolveConflict: (id: string, resolution: "kept-local" | "kept-notion" | "merged") =>
     apiPost<{ ok: true }>("/api/notion/conflicts", { id, resolution }),
+  testConnection: () => apiGet<NotionConnectionTestResult>("/api/notion/test-connection"),
 };

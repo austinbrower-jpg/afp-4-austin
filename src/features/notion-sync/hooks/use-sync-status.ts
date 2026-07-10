@@ -26,6 +26,13 @@ export function useTriggerSync() {
   });
 }
 
+/** Read-only credential check - never queries or writes a database. */
+export function useTestNotionConnection() {
+  return useMutation({
+    mutationFn: () => notionSyncApi.testConnection(),
+  });
+}
+
 /**
  * Runs sync once on mount (app startup) and then on an interval driven by
  * the configured NOTION_SYNC_INTERVAL_MINUTES (spec: "pull updates every
