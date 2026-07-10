@@ -1,5 +1,124 @@
 # Dev Updates
 
+## 2026-07-09 ~22:10 CT — Phase 4: real AFP Notion databases created and mapped (Claude Code)
+
+**AI model:** Claude Sonnet 5 (Claude Code)
+
+### Summary
+
+Phase 4 per the user's brief: created all six real Notion databases the app
+needs, using the connected Notion MCP integration (same "Battle Bound
+Branding" workspace the app's own integration is scoped to), wired their ids
+into `.env.local`, and ran the read-only verification tool. All six came back
+`configured`, `accessible`, and `schemaValid` on the first check - zero
+schema mismatches, so **zero application code changes were needed** this
+phase. `NOTION_SYNC_ENABLED` stays unset/false throughout. Not committed yet
+- awaiting the user's review of the final report (nothing to commit anyway,
+since no tracked files changed - see below).
+
+### Structure deviation found and deliberately not corrected
+
+Live inspection (via Notion search/fetch) showed `Power Automate Flow Map`
+and `AFP Command Center / Internal Sales & Operations Hub Plan` are direct
+children of `AFP-Work`, not nested under `Work Stuff` as the user's target
+diagram showed. Per the explicit "do not move existing pages" rule, these
+were left exactly where they are. Only a new `Knowledge Database` was added
+as a child of `Work Stuff` (which had no children before this phase).
+
+### Databases created (all via Notion MCP `notion-create-database`, additive only)
+
+| Database | Notion ID | Parent page | Entity |
+|---|---|---|---|
+| Clients Database | `f1ce565d-fe7d-4223-9194-3891851099a6` | AFP-Work | `client` |
+| Projects Database | `0bcf7825-268a-412c-a102-bb76040eea63` | AFP-Work | `project` |
+| Hours Worked Database | `a192465a-4bbe-442e-86a5-255db6d65df6` | Invoice Details | `hours` |
+| Work Done Database | `69e74fe8-dcba-48cc-92a7-5ede949342e6` | Invoice Details | `worklog` |
+| Invoice Reports Database | `648e1260-58eb-431d-9ca9-da7c0088f8ef` | Invoice Details | `invoice` |
+| Knowledge Database | `d5a5ce19-1061-4747-9480-962187edde24` | Work Stuff | `knowledge` |
+
+Each schema was built directly from `NOTION_PROPERTY_REQUIREMENTS` in
+`src/lib/notion/schema-requirements.ts` (property name + exact type per
+field), with `SELECT`/`MULTI_SELECT` option values taken from the domain
+types in `src/types/domain.ts`. Verified each database's returned schema
+immediately after creation via `notion-fetch` before moving to the next one.
+
+The existing `Hours Worked` and `Work Done` *pages* under Invoice Details
+were left completely untouched - the new `Hours Worked Database`/`Work Done
+Database` are separate siblings, not replacements. Confirmed via
+`notion-fetch` on `AFP-Work`, `Invoice Details`, and `Work Stuff` after all
+six were created: every pre-existing child page is still present, in its
+original position, with only the six new databases appended after them.
+
+### `.env.local` updated
+
+Added all six `NOTION_DATABASE_*` ids (see table above). `NOTION_SYNC_ENABLED`
+remains unset (defaults to `false`). Confirmed still gitignored/untracked
+(`git ls-files --error-unmatch .env.local` fails, `git check-ignore -v` shows
+`.gitignore:34:.env*`).
+
+### Read-only verification results
+
+`GET /api/notion/verify-databases` (run via `curl` against a local dev
+server, then re-run through the actual "Verify databases" button in
+Settings): **all six databases reported `configured: true`, `accessible:
+true`, `schemaValid: true` on the first check - `ready: true` overall, zero
+missing/wrong-type properties.** This means the databases were already
+accessible to the app's "AFP Contractor Workspace" integration (inherited
+share permission from a parent page), so the manual "share with integration"
+step turned out to be unnecessary - nothing needed fixing or re-checking.
+
+`GET /api/notion/status` immediately after: `syncEnabled: false`,
+`configuredDatabases` lists all six, `missingDatabases: []`, and critically
+the automatic startup sync logged `entitiesSynced: 0, conflicts: 0, errors:
+0` with message *"Notion sync is disabled (NOTION_SYNC_ENABLED is not
+'true')..."* - hard proof that having all six real database ids configured
+did not trigger any read or write against Notion, even on the automatic
+startup sync.
+
+Browser-verified in Settings: Notion Connection card shows "Connected · 6/6
+databases mapped"; Notion Database Mapping card shows all six as "Ready"
+with green Configured/Accessible/Schema valid indicators; toast read
+"Read-only mapping ready — all six databases check out." Zero console
+errors.
+
+### Property changes made
+
+None. Every property matched on the first attempt - no additive fixes were
+necessary.
+
+### Final verification suite
+
+- `npm run lint` - pass (0 errors, 0 warnings).
+- `npm run typecheck` - pass.
+- `npm test` - pass (50/50, unchanged from Phase 3 - no code changed this
+  phase).
+- `npm run build` - pass; same 22 routes as Phase 3 (no new routes needed).
+
+### Confirmations
+
+- **Live write sync remains disabled**: `NOTION_SYNC_ENABLED` unset/false;
+  `syncEnabled: false` confirmed via `/api/notion/status`; the startup sync's
+  `entitiesSynced/conflicts/errors` all `0` proves no read or write occurred.
+- **No existing Notion content was modified**: confirmed via `notion-fetch`
+  on all three parent pages post-creation - every pre-existing child (Hours
+  Worked, Work Done, Power Automate Flow Map, AFP Command Center) is present,
+  unchanged, in its original position.
+- **July 8 / July 9 historical entries were not migrated**: no pull was
+  performed (gated by `NOTION_SYNC_ENABLED=false`), and nothing in this
+  phase read row-level content from any database or existing page.
+- **Nothing was committed.** The only tracked-file change this phase is this
+  `DevUpdates.md` append (no application code was touched); `.env.local` was
+  also updated but stays gitignored/untracked.
+
+### Exact next step for historical data migration
+
+Per `docs/notion-migration-plan.md`, migrating the July 8/July 9 Hours
+Worked and Work Done entries into the new databases is a separate, not-yet-
+approved step requiring `NOTION_SYNC_ENABLED=true`. It has intentionally not
+been started.
+
+---
+
 ## 2026-07-09 ~21:30 CT — Phase 3: real Notion database creation and read-only mapping (Claude Code)
 
 **AI model:** Claude Sonnet 5 (Claude Code)
