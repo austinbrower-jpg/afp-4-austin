@@ -1,5 +1,224 @@
 # Dev Updates
 
+## 2026-07-10 ~01:20 CT — Phase 6: one-time historical Notion import built (not executed, Claude Code)
+
+**AI model:** Claude Sonnet 5 (Claude Code)
+
+### Summary
+
+Phase 6 per the user's brief: build a narrowly-scoped, duplicate-protected,
+two-step-confirmed write path that can (once explicitly approved) create the
+11 approved historical records - 1 client, 3 projects, 5 hours rows, 2 work
+logs - in the real Notion workspace. Built, unit-tested against a mocked
+Notion client (zero real network calls from any test), and browser-verified
+with the real read-only preflight endpoint plus an in-browser `fetch`
+intercept for the write endpoint so **the real import was never triggered**.
+Branch: `feat/notion-historical-import` off the cleanly-committed Phase 5
+tip (`3778225`). Not committed - awaiting the user's review of this report.
+`NOTION_SYNC_ENABLED` remains unset/false throughout; untouched.
+
+### What was built
+
+1. **`src/lib/notion/migration/write-keys.ts`** (pure, no Notion/SQLite) -
+   deterministic, versioned (`-v1`) migration keys: `clientMigrationKey()`,
+   `projectMigrationKey()`, `hoursMigrationKey()` (date+start+end+billable+
+   project), `workLogMigrationKey()` (date+title).
+2. **`src/lib/notion/migration/write-schema.ts`** (pure) - the two additive
+   Notion properties this migration introduces (`Migration Key` rich_text;
+   `Project` relation - completing a property name `NOTION_SCHEMA.hours.
+   project`/`.worklog.project` in `mappers.ts` already reserved but never
+   wrote), plus pure Notion property-object builders for all four entity
+   types, kept fully independent of `mappers.ts` (which is
+   `server-only`) and of the general sync engine.
+3. **`src/lib/notion/migration/one-time-import.ts`** (pure orchestration,
+   Notion client injected as a parameter - never constructed internally) -
+   `runPreflight()` (read-only: live schema/duplicate checks + the Phase 5
+   dry run's totals/counts) and `runImport()` (confirmation phrase → full
+   preflight re-run → additive schema setup → client → projects → hours →
+   work logs, stop-on-first-failure). `toNotionWriteClient()` narrows the
+   real `@notionhq/client` `Client` to the minimal structural interface
+   this module needs.
+4. **`GET /api/notion/migration-import/preflight`** (read-only) and
+   **`POST /api/notion/migration-import`** (the one write endpoint - body:
+   `{ confirmationPhrase }`, always 200 with a structured result; a
+   rejected/malformed phrase or failed preflight is a well-formed result,
+   not an HTTP error).
+5. **Settings UI** - new "Historical Notion Import" card linking to
+   `/settings/migration-import`: Step 1 (live preflight + exact
+   records/counts/totals + schema/duplicate scan, "No writes yet" badge,
+   manual re-check), Step 2 (text input requiring the exact phrase
+   `IMPORT AFP JULY 8-9` - **Import now** stays `disabled` until the typed
+   value matches exactly; no checkbox alternative), and a Results panel
+   (created/skipped/failed with Notion links, reconciled totals, run id,
+   timestamps, and a status badge that reads "Import complete", "Partial
+   failure - stopped early", "Blocked by preflight", or "Confirmation
+   rejected" depending on outcome).
+6. **`docs/notion-migration-plan.md`** - new "Phase 6" section: import
+   procedure, duplicate-key table, additive schema-change table, write
+   order, partial-failure recovery (rerun is always safe - no manual
+   cleanup, no rollback), and a pre-approval verification checklist.
+
+### Duplicate-key strategy
+
+Every creatable record gets a deterministic key (table above, in the docs
+section) written into a new `Migration Key` rich_text property. Before any
+write, the import queries each database (`dataSources.query`, filtered by
+these exact keys, read-only) for existing matches - a match is skipped, not
+recreated, regardless of whether it's from a prior full run, a prior
+partial run, or manual creation. This is the entire idempotency/rerun-safety
+mechanism - no local "have I run this before" flag anywhere.
+
+### Preflight rules (all must pass before Step 2 unlocks or any write fires)
+
+`api-key-configured`, `sync-disabled` (refuses while `NOTION_SYNC_ENABLED=
+true` - **by design**, so this path and general sync can never interleave;
+see "Design decisions" below), `all-databases-ready` (reuses
+`verifyNotionDatabases()` from Phase 3/4, unmodified), `billable-hours-
+total` (=10.37), `non-billable-hours-total` (=2.00), `invoice-amount-total`
+(=$311.00), `client-count`/`project-count`/`hours-count`/`worklog-count`
+(1/3/5/2). The server re-runs every one of these live inside `POST
+/api/notion/migration-import` itself - it never trusts a client-supplied
+"preflight already passed" claim.
+
+### Write order & relation resolution
+
+Client → Projects (BOL Review V2, Command Center, Power Automate Docs, in
+that fixed order) → Hours (5) → Work logs (2). Each hours/work-log row's new
+`Project` relation resolves to the Notion page id created (or duplicate-
+matched) in the Projects step. July 9's work log additionally gets its
+`relatedProjectsNote` (Command Center + Power Automate Documentation
+cross-reference) appended to the Notion `Summary` property text, since the
+schema only supports one `Project` relation per row - see Phase 5's
+"related-project metadata" decision.
+
+### Partial-failure behavior
+
+Stops immediately on the first failed `pages.create` - no retries, no
+continuing into later steps. Returns exactly what was created/skipped/
+failed before the stop. Recovery is just "run it again": the live duplicate
+scan on the rerun finds everything already created (by migration key) and
+skips it, then continues with only what's missing. No rollback of
+already-created pages is ever attempted.
+
+### Design decisions made without an explicit instruction (flagged for review)
+
+1. **`sync-disabled` blocks the import while `NOTION_SYNC_ENABLED=true`**,
+   rather than ignoring that flag entirely. Goal 9's test list asked me to
+   decide this "unless you determine this should remain false by design" -
+   I judged that allowing this narrow write path to run *while* general
+   sync is also active would blur exactly the boundary the whole phase is
+   built to keep sharp (two independent write paths that could otherwise
+   race or double-push the same records), so it actively requires
+   `NOTION_SYNC_ENABLED=false` rather than merely not depending on it.
+2. **"No duplicate migration keys already exist" (goal 3) is a live-scanned
+   report, not a hard refusal.** Goal 7 explicitly requires safe reruns
+   that skip already-created records - a hard refusal on any existing key
+   would make that impossible. Preflight always runs the duplicate scan and
+   reports it in full (goal 3's intent: never write blind); whether to
+   proceed past it is left to the human reviewing Step 1, not an automatic
+   block.
+3. **The `Migration Key`/`Project` relation additive schema changes are
+   applied by `runImport()` itself** (as step 0, before any `pages.create`
+   call), not as a separate manual pre-step - preflight only *reports*
+   whether they're present (read-only), since goal 3's six explicit
+   refusal conditions don't include "schema property already exists."
+   Both are non-destructive, additive-only column changes (documented in
+   the Phase 3-era safety notes already in this file) and are exactly the
+   kind of action goal 1 scopes this "narrowly scoped one-time migration
+   path" to be allowed to do.
+
+### Tests added (35 new, 158/158 total passing)
+
+- `write-keys.test.ts` (7) - the exact literal key for all 11 real records,
+  determinism, distinctness by project/billable status, safe slugification.
+- `write-schema.test.ts` (17) - property-presence detection, additive-patch
+  shape, per-entity property builders, relation-inclusion/omission,
+  `relatedProjectsNote` appending.
+- `one-time-import.test.ts` (28, later trimmed/fixed to the actual project
+  write-order to 27 after two assertions needed correcting against real
+  behavior) - confirmation-phrase enforcement (missing/malformed/exact),
+  preflight refusal for every rule above, live re-run-before-write (server
+  never trusts client state), exact write order, Project-relation
+  resolution (including the non-billable onsite row correctly getting no
+  relation), additive schema setup (only where missing, zero calls when
+  already present), duplicate skip, a full-rerun-after-completion no-op,
+  a rerun-after-partial-failure completing only what's missing, stop-on-
+  first-failure with an exact before/after record list, no-retry (`pages.
+  create` called exactly once for the failing key), and a static source-
+  text scan proving no `pages.update`/`pages.move`/archive/delete/trash
+  call exists anywhere in the module.
+
+### Final verification suite
+
+- `npm run lint` - pass (0 errors, 0 warnings; one `no-unused-vars`
+  warning on a dead `clientPageId` local caught and removed during this
+  pass).
+- `npm run typecheck` - pass.
+- `npm test` - pass (158/158 - 123 from Phase 5 + 35 new).
+- `npm run build` - pass; `/api/notion/migration-import`,
+  `/api/notion/migration-import/preflight`, and `/settings/migration-
+  import` compile alongside the existing 27 routes.
+
+### Browser verification performed (real preflight, simulated write only)
+
+Started a dev server against the real, already-configured
+`NOTION_API_KEY`/six `NOTION_DATABASE_*` ids and loaded `/settings/
+migration-import` for real: **Step 1's preflight ran live against the real
+Notion workspace** (read-only - `databases.retrieve`/`dataSources.
+retrieve`/`dataSources.query`, the same call shapes Phase 3/4's "Verify
+databases" already exercises safely) and correctly reported `ready: true`,
+all 10 checks passing, 1/3/5/2 counts, 10.37h/2.00h/$311.00 totals, and
+"Migration Key: will be added" for all four databases with "No existing
+migration-key matches found" - confirming live Notion has *not* been
+touched by any prior phase, exactly as expected.
+
+For the write step, **the real `POST /api/notion/migration-import` call was
+never made**: before touching the confirmation input, `window.fetch` was
+patched in-page (via `preview_eval`) to intercept only that specific
+POST and return a canned JSON body, leaving every other request (including
+the real preflight GETs) untouched. With that intercept armed:
+- Typed a wrong/partial phrase - **Import now** stayed disabled
+  (`button.disabled === true`, confirmed via DOM inspection) and the
+  "Phrase doesn't match exactly" error rendered.
+- Typed the exact phrase `IMPORT AFP JULY 8-9` - button became enabled;
+  clicking it hit the intercept (confirmed via a captured
+  `window.__interceptedImportCall`, never the network layer) and rendered
+  a mocked **success** result correctly: "Import complete" badge, reconciled
+  totals, Created/Skipped sections with working "Open in Notion" links.
+- Re-armed the intercept with a mocked **partial-failure** body and
+  clicked again (phrase was still valid) - rendered "Partial failure -
+  stopped early" correctly, with the two successfully-created records
+  listed under Created and the failing one listed under Failed with its
+  error message.
+- Checked the full network log afterward: the only requests to
+  `/api/notion/migration-import*` across the entire session were three
+  **GET .../preflight** calls - zero `POST /api/notion/migration-import`
+  ever reached the server.
+- `preview_console_logs` at `error` level and `preview_network` for failed
+  requests: zero errors, zero failures throughout.
+- Restored `window.fetch` and stopped the dev server afterward.
+
+### Confirmations
+
+- **General live sync remains disabled.** `NOTION_SYNC_ENABLED` was never
+  set anywhere this phase; the live preflight's `sync-disabled` check
+  confirmed it reads `false` against the real environment.
+- **No existing Notion content was modified during development.** Every
+  live Notion call made this phase was read-only (`databases.retrieve`,
+  `dataSources.retrieve`, `dataSources.query`) via the real preflight
+  endpoint; the one write endpoint was never actually invoked (see browser
+  verification above) - confirmed both by the intercept design and by the
+  network log showing zero POSTs to it.
+- **The real import was not executed.** No client/project/hours/work-log
+  page was created in Notion, and neither additive schema property
+  (`Migration Key`, `Project` relation) was added to any live database.
+  Awaiting explicit approval of the preflight report before running it for
+  real.
+- **Nothing was committed.** Per instruction, awaiting review of this
+  report before committing on `feat/notion-historical-import`.
+
+---
+
 ## 2026-07-10 ~00:05 CT — Phase 5 follow-up: approved billing convention + project assignments applied (Claude Code)
 
 **AI model:** Claude Sonnet 5 (Claude Code)
