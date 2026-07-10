@@ -152,6 +152,24 @@ CREATE TABLE IF NOT EXISTS invoice_reports (
   updated_at TEXT NOT NULL
 );
 
+-- Local-only presentation configuration. This table is intentionally not
+-- syncable and has no Notion ids: report settings must not write to Notion.
+CREATE TABLE IF NOT EXISTS report_settings (
+  id TEXT PRIMARY KEY CHECK (id = 'default'),
+  contractor_name TEXT NOT NULL DEFAULT '',
+  business_name TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  address TEXT NOT NULL DEFAULT '',
+  default_hourly_rate REAL NOT NULL DEFAULT 0,
+  default_payment_terms TEXT NOT NULL DEFAULT '',
+  default_invoice_notes TEXT NOT NULL DEFAULT '',
+  logo_path TEXT NOT NULL DEFAULT '',
+  client_display_name TEXT NOT NULL DEFAULT '',
+  client_billing_contact TEXT NOT NULL DEFAULT '',
+  client_billing_email TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS sync_queue (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL,

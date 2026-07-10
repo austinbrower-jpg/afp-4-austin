@@ -30,7 +30,7 @@ npm run build        # production build
 npm run start         # run the production build
 npm run lint           # eslint
 npm run typecheck   # tsc --noEmit
-npm test                # vitest run — calculations + invoice generation
+npm test                # vitest run — calculations, invoices, migrations, reports
 npm run electron:dev    # next dev + an Electron window, together
 npm run electron:build  # next build + electron-builder packaging
 ```
@@ -43,9 +43,10 @@ npm run electron:build  # next build + electron-builder packaging
 | Hours Worked | `/hours` | Database-driven time table, auto hour calculation, running weekly/monthly totals, timer mode, manual entry mode |
 | Work Done | `/work-done`, `/work-done/[id]` | Work log entries with engineering notes and invoice description edited **separately**, status/priority, related hours & knowledge, evidence, attachments |
 | Invoice Reports | `/invoices`, `/invoices/[id]` | Auto-generated weekly reports from logged hours + work, export to PDF / Markdown / clipboard |
+| Report Builder | `/reports` | Read-only Simple Invoice, Detailed Invoice, and Detailed Work Log Report previews with privacy diagnostics and PDF / HTML / Markdown / clipboard / JSON exports |
 | Projects | `/projects`, `/projects/[id]` | The hub connecting hours, work logs, and documentation per project |
 | Documentation / Notes / Flow Maps / Research / Meeting Notes | `/knowledge/[type]`, `/knowledge/page/[id]` | Nested knowledge base pages, tags, in-app search, `[[wiki-link]]` backlinks |
-| Settings | `/settings` | Client/hourly-rate config, Notion connection status, sync conflicts, desktop app info |
+| Settings | `/settings` | Client/hourly-rate config, local contractor/report defaults, Notion connection status, sync conflicts, desktop app info |
 
 Global search (`⌘K` / `Ctrl+K`) searches across hours, work logs, projects, and the knowledge base at once.
 
@@ -71,11 +72,30 @@ src/
     notion/               # Notion client, database<->domain mappers, sync engine
     mock-data/            # seed data generator
     calculations.ts       # hours/currency math shared by Hours + Invoices
+    reports/               # pure filtering, privacy, billing, composition, serializers
   types/domain.ts        # the entity contracts everything else is built on
 electron/                 # Electron main/preload processes
 ```
 
-Every module (Dashboard, Hours, Work Done, Invoices, Knowledge, Projects, Settings) follows the same shape: a Next.js route reads from the SQLite-backed repository layer directly (Server Components) or through its own `app/api/<module>` route handlers (client mutations), a `features/<module>/api.ts` typed fetch client, React Query hooks, and presentational components.
+Every module (Dashboard, Hours, Work Done, Invoices, Reports, Knowledge, Projects, Settings) follows the same shape: a Next.js route reads from the SQLite-backed repository layer directly (Server Components) or through its own `app/api/<module>` route handlers, a typed fetch boundary, React Query hooks where needed, and presentational components.
+
+## Report generation
+
+The dedicated [Report Builder](http://localhost:3000/reports) composes three client-facing formats without saving or changing any source records:
+
+- **Simple Invoice** — contractor/client identity, billing period, project totals, exact billable time, rate, amount due, and notes.
+- **Detailed Invoice** — the Simple Invoice plus every approved billable session, exact duration, client-visible description, daily subtotals, and project subtotals.
+- **Detailed Work Log Report** — executive summary, daily client-visible Work Done, related knowledge, deliverables, testing, blockers/follow-ups, evidence, and billable/non-billable time breakdowns.
+
+Exports include PDF, standalone print-friendly HTML, Markdown download, Markdown clipboard copy, and a deterministic JSON audit snapshot. Billing uses exact elapsed minutes: `exactMinutes / 60 × hourlyRate`, rounding only each final line amount to cents. The approved July 8–9 historical preview therefore reconciles to **$311.00**.
+
+The builder never mixes sources. It labels and isolates:
+
+- **Notion data** — cached rows that have a Notion page id; missing proposed visibility flags default to excluded.
+- **Historical preview data** — the approved deterministic July 8–9 preview, available without running the historical import.
+- **Local mock data** — SQLite development rows. A populated legacy `invoiceDescription` is treated as the local/mock opt-in because that field is already explicitly client-facing.
+
+Report settings in Settings are stored only in the local `report_settings` repository and have no Notion ids or sync path. The future **Save report metadata to Invoice Reports** action is visible but disabled as **Not enabled yet**. See [`docs/report-generation.md`](docs/report-generation.md) for the privacy model, source behavior, schema proposal, and export details.
 
 ### Local SQLite cache
 

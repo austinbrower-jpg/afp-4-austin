@@ -128,3 +128,30 @@
     @apply font-sans;
   }
 }
+
+@media print {
+  [data-slot="sidebar"],
+  header.sticky,
+  .report-preview > :first-child {
+    display: none !important;
+  }
+
+  main.flex-1 {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  .report-preview {
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .report-preview table thead {
+    display: table-header-group;
+  }
+
+  .report-preview tr,
+  .report-preview article {
+    break-inside: avoid;
+  }
+}

@@ -370,3 +370,15 @@ Built and tested (mocked Notion client only - see
 `one-time-import.test.ts`). **Not yet executed against the real
 workspace.** Awaiting explicit approval of the live preflight report before
 the real import is run.
+
+---
+
+## Phase 7 report visibility proposal (not applied)
+
+The read-only Report Builder defines the future visibility contract without changing any live Notion database. See [`report-generation.md`](report-generation.md) for full behavior.
+
+Proposed Work Done additions: `Client Visible` (checkbox), `Include in Invoice` (checkbox), `Include in Work Report` (checkbox), `Detailed Work Description` (rich text), `Internal Notes` (rich text), `Evidence Links` (rich text or URL), and `Related Hours` (relation to Hours Worked if safe).
+
+Proposed Knowledge additions: `Client Visible` (checkbox), `Include in Work Report` (checkbox), `Report Summary` (rich text), `Project` (relation to Projects), and `Source Page` (URL).
+
+Until those fields are approved, applied, and mapped into the shared repository projection, cached Notion records with missing visibility flags are excluded by default. Phase 7 performs no Notion schema update, report save, historical import, or general sync enablement. `NOTION_SYNC_ENABLED` remains `false`.
