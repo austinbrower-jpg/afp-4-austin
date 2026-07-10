@@ -35,12 +35,18 @@ export function useTestNotionConnection() {
 
 /**
  * Read-only schema mapping check - retrieves each configured database's
- * schema and compares it to what the app expects. Never queries row data,
- * never writes. Manual trigger only (not polled) to avoid hammering Notion.
+ * schema and compares it to what the app expects. It runs once when the
+ * Settings card loads, remains fresh for five minutes, and can be refreshed
+ * manually. It never queries row data and never writes.
  */
+export const mappingVerificationQueryKey = ["notion", "database-verification"] as const;
+
 export function useVerifyNotionDatabases() {
-  return useMutation({
-    mutationFn: () => notionSyncApi.verifyDatabases(),
+  return useQuery({
+    queryKey: mappingVerificationQueryKey,
+    queryFn: () => notionSyncApi.verifyDatabases(),
+    staleTime: 5 * 60_000,
+    retry: false,
   });
 }
 

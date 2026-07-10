@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, Database, Eye, LockKeyhole } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api-client/http";
 import { composeReport } from "@/lib/reports/engine";
+import { useBrowserReportSettings } from "@/features/reports/lib/browser-report-settings";
 import type { ReportBuilderData } from "@/lib/reports/data-source";
 import type {
   ReportBuilderInput,
@@ -15,6 +16,7 @@ import type {
   ReportSettings,
   ReportType,
 } from "@/lib/reports/types";
+import { DEFAULT_REPORT_SETTINGS } from "@/lib/reports/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,6 +86,10 @@ export function ReportBuilder() {
     queryKey: ["report-settings"],
     queryFn: () => apiGet<ReportSettings>("/api/report-settings"),
   });
+  const settings = useBrowserReportSettings(
+    settingsQuery.data ?? DEFAULT_REPORT_SETTINGS,
+    builderQuery.data?.recommendedSource === "notion",
+  );
   const [state, setState] = useState<BuilderState | null>(null);
   const [hasExported, setHasExported] = useState(false);
   const [isSavingMetadata, setIsSavingMetadata] = useState(false);
@@ -91,7 +97,7 @@ export function ReportBuilder() {
   if (builderQuery.data && settingsQuery.data && state === null) {
     const source = builderQuery.data.recommendedSource;
     const dataset = builderQuery.data.datasets.find((candidate) => candidate.source === source)!;
-    setState(makeInitialState(dataset, source, settingsQuery.data));
+    setState(makeInitialState(dataset, source, settings));
   }
 
   if (builderQuery.isError || settingsQuery.isError) {
@@ -103,7 +109,7 @@ export function ReportBuilder() {
 
   const dataset = builderQuery.data.datasets.find((candidate) => candidate.source === state.source)!;
   const clientProjects = dataset.projects.filter((project) => project.clientId === state.clientId);
-  const report = composeReport(dataset, settingsQuery.data, state);
+  const report = composeReport(dataset, settings, state);
   const approvedDraftRecords = dataset.workRecords.filter((record) => {
     if (record.clientId !== state.clientId || record.date < state.periodStart || record.date > state.periodEnd) return false;
     if (record.clientVisible !== true) return false;
@@ -120,7 +126,7 @@ export function ReportBuilder() {
     { setHasExported(false); setSavedMetadataUrl(null); setState({ ...state, [key]: value }); };
   const changeSource = (source: ReportDataSource) => {
     const next = builderQuery.data!.datasets.find((candidate) => candidate.source === source)!;
-    setState({ ...makeInitialState(next, source, settingsQuery.data!), type: state.type });
+    setState({ ...makeInitialState(next, source, settings), type: state.type });
     setHasExported(false);
     setSavedMetadataUrl(null);
   };

@@ -6,10 +6,10 @@ import type { HoursEntry, Project } from "@/types/domain";
 const title = (value: string) => ({ title: [{ plain_text: value }] });
 const text = (value: string) => ({ rich_text: [{ plain_text: value }] });
 
-function mockNotion(options: { hours?: unknown[]; queryError?: Error } = {}) {
+function mockNotion(options: { clients?: unknown[]; hours?: unknown[]; queryError?: Error } = {}) {
   const clientPage = { object: "page", id: "client-page", properties: { Name: title("Anytime Fuel Pros"), Status: { select: { name: "active" } }, "Default Hourly Rate": { number: 30 }, Color: text("#6366f1"), Timezone: text("America/Chicago"), Notes: text("") } };
   const queries: Record<string, unknown[]> = {
-    "clients-source": [clientPage],
+    "clients-source": options.clients ?? [clientPage],
     "hours-source": options.hours ?? [],
     "projects-source": [], "worklogs-source": [], "knowledge-source": [], "invoices-source": [],
   };
@@ -48,6 +48,14 @@ beforeEach(() => {
 });
 
 describe("NativeNotionProvider", () => {
+  it("settles with an empty client list when the Clients database has no rows", async () => {
+    const notion = mockNotion({ clients: [] });
+    const provider = new NativeNotionProvider(notion as unknown as NotionClient, databases);
+
+    await expect(provider.clients.list()).resolves.toEqual([]);
+    expect(notion.dataSources.query).toHaveBeenCalledTimes(1);
+  });
+
   it("reads live Notion rows into shared domain models", async () => {
     const hoursPage = { object: "page", id: "hours-page", url: "https://notion.so/hours-page", properties: {
       Date: title("2026-07-10"), "Start Time": text("09:00"), "End Time": text("10:00"),

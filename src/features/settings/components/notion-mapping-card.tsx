@@ -98,26 +98,23 @@ function DatabaseResultCard({ db }: { db: NotionDatabaseVerification }) {
 }
 
 export function NotionMappingCard() {
-  const { mutate: verify, data, isPending, isIdle } = useVerifyNotionDatabases();
+  const { data, isLoading, isFetching, isError, error, refetch } = useVerifyNotionDatabases();
 
-  const handleVerify = () => {
-    verify(undefined, {
-      onSuccess: (report) => {
-        if (report.ready) {
-          toast.success("Read-only mapping ready — all six databases check out.");
-        } else if (!report.apiKeyConfigured) {
-          toast.error("NOTION_API_KEY is not set.");
-        } else {
-          const notReady = report.databases.filter(
-            (d) => !(d.configured && d.accessible && d.schemaValid),
-          ).length;
-          toast.error(`${notReady}/6 database(s) not ready yet — see details below.`);
-        }
-      },
-      onError: (err) => {
-        toast.error(err instanceof Error ? err.message : "Database verification failed");
-      },
-    });
+  const handleVerify = async () => {
+    const result = await refetch();
+    const report = result.data;
+    if (!report) {
+      toast.error(result.error instanceof Error ? result.error.message : "Database verification failed");
+    } else if (report.ready) {
+      toast.success("Read-only mapping ready — all six databases check out.");
+    } else if (!report.apiKeyConfigured) {
+      toast.error("NOTION_API_KEY is not set.");
+    } else {
+      const notReady = report.databases.filter(
+        (d) => !(d.configured && d.accessible && d.schemaValid),
+      ).length;
+      toast.error(`${notReady}/6 database(s) not ready yet — see details below.`);
+    }
   };
 
   return (
@@ -138,22 +135,27 @@ export function NotionMappingCard() {
               <ShieldCheck className="size-3" />
               {data.ready ? "Read-only mapping ready" : "Not ready"}
             </Badge>
+          ) : isError ? (
+            <Badge variant="outline">Check failed</Badge>
           ) : (
-            <Badge variant="outline">Not checked yet</Badge>
+            <Badge variant="outline">Checking…</Badge>
           )}
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button variant="outline" disabled={isPending} onClick={handleVerify}>
-          {isPending ? "Checking…" : "Verify databases"}
+        <Button variant="outline" disabled={isFetching} onClick={handleVerify}>
+          {isFetching ? "Checking…" : "Verify databases again"}
         </Button>
 
-        {isIdle && !data && (
+        {isLoading && !data && (
           <p className="text-sm text-muted-foreground">
-            Run a check after adding your six <code className="rounded bg-muted px-1 py-0.5 text-xs">
-              NOTION_DATABASE_*
-            </code>{" "}
-            ids to see what&apos;s missing before enabling real sync.
+            Running the safe read-only database verification…
+          </p>
+        )}
+
+        {isError && !data && (
+          <p className="text-sm text-destructive">
+            {error instanceof Error ? error.message : "Database verification failed."}
           </p>
         )}
 
