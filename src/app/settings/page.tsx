@@ -2,6 +2,8 @@ import { WorkspaceClientCard } from "@/features/settings/components/workspace-cl
 import { NotionConnectionCard } from "@/features/settings/components/notion-connection-card";
 import { NotionMappingCard } from "@/features/settings/components/notion-mapping-card";
 import { ConflictsCard } from "@/features/settings/components/conflicts-card";
+import { MigrationPreviewCard } from "@/features/settings/components/migration-preview-card";
+import { MigrationImportCard } from "@/features/settings/components/migration-import-card";
 import { DesktopAppCard } from "@/features/settings/components/desktop-app-card";
 
 export default function SettingsPage() {
@@ -18,6 +20,8 @@ export default function SettingsPage() {
         <WorkspaceClientCard />
         <NotionConnectionCard />
         <NotionMappingCard />
+        <MigrationPreviewCard />
+        <MigrationImportCard />
         <ConflictsCard />
         <DesktopAppCard />
       </div>
