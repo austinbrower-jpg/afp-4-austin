@@ -24,10 +24,13 @@ export async function GET(request: NextRequest) {
   try {
     const provider = await getDataProvider();
     const client = (await provider.clients.list())[0];
-    if (!client) return NextResponse.json([], { headers: NO_STORE_HEADERS });
+    if (!client && provider.mode !== "notion") {
+      return NextResponse.json([], { headers: NO_STORE_HEADERS });
+    }
     const start = request.nextUrl.searchParams.get("start");
     const end = request.nextUrl.searchParams.get("end");
-    let entries = (await provider.hours.list()).filter((entry) => entry.clientId === client.id);
+    let entries = await provider.hours.list();
+    if (client) entries = entries.filter((entry) => entry.clientId === client.id);
     if (start && end) entries = entries.filter((entry) => entry.date >= start && entry.date <= end);
     entries.sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime));
     return NextResponse.json(await withRelations(entries, provider), { headers: NO_STORE_HEADERS });
@@ -45,13 +48,19 @@ export async function POST(request: NextRequest) {
     }
     const provider = await getDataProvider();
     const [workspace, client] = await Promise.all([provider.workspace(), provider.clients.list().then((rows) => rows[0])]);
-    if (!workspace || !client) return NextResponse.json({ error: "No workspace/client configured." }, { status: 400 });
+    if (!workspace || (!client && provider.mode !== "notion")) {
+      return NextResponse.json({ error: "No workspace/client configured." }, { status: 400 });
+    }
     const exactMinutes = exactElapsedMinutes(parsed.data.startTime, parsed.data.endTime, parsed.data.breakMinutes);
     if (exactMinutes <= 0) return NextResponse.json({ error: "Elapsed time must be greater than zero." }, { status: 400 });
     const entry: HoursEntry = {
       ...newEntityBase("hours"),
       workspaceId: workspace.id,
-      clientId: client.id,
+      // Notion Hours has no Client relation. Before the one-time import
+      // creates the Client row, the native provider already projects Hours
+      // with an empty client identity; use that same identity for the
+      // controlled create/readback path. Mock mode still requires a Client.
+      clientId: client?.id ?? "",
       projectId: parsed.data.projectId,
       date: parsed.data.date,
       startTime: parsed.data.startTime,

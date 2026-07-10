@@ -1356,6 +1356,35 @@ No Notion write path was called. No source Hours, Work Done, Project, Client, In
 
 ---
 
+## 2026-07-10 — Phase 9: Production activation Hours clientless fix (Codex)
+
+### Root cause and behavior change
+
+- The failed production Hours POST was rejected by the application before it reached Notion. The route required the first Client record for every provider, but the production Clients database is intentionally empty. The Hours payload and Notion Hours property mapping were not the cause, and Notion did not reject a property name or type.
+- In Notion mode, Hours POST now uses the provider's existing empty/unassigned client identity when the domain object requires `clientId`. It does not send a Client relation to Notion. Hours GET also returns valid Notion rows when no Client exists instead of filtering them out.
+- Mock mode retains the existing Client requirement and still returns the client-required 400 when no Client is configured.
+- Existing exact elapsed-minute calculation, non-billable `$0.00` amount, and omission of null Project and Related Work Log relations are preserved. No invalid null property values are sent to Notion.
+- Hours dialogs now surface the server-provided API error message, with a generic message only for unexpected errors.
+
+### Tests and verification
+
+- Added route coverage for Notion-mode create and GET with an empty Clients database, a one-minute non-billable entry, `$0.00` amount, omitted null Project/Related Work Log relations, and the preserved mock-mode Client requirement.
+- Added mapper/provider coverage proving the Date title is populated, optional relations are absent, and no null values are sent. Added UI error-helper coverage for server messages and the unexpected-error fallback.
+- `npm run lint` — pass (0 errors, 0 warnings).
+- `npm run typecheck` — pass.
+- `npm test` — pass, 215/215 tests across 20 files.
+- `npm run build` — pass with Next.js 16.2.10.
+- `git diff --check` — pass.
+
+### Deployment and safety
+
+- Protected Preview deployment `dpl_7mCHrjMs9FpVTpXaQ7GPRCLqcq3w` built successfully. Anonymous access redirects to Vercel SSO. Health reports Notion mode, SQLite disabled, general sync disabled, and Vercel deployment protection.
+- Preview Hours GET returned an empty array. A deliberately zero-duration POST reached the corrected path and returned the later expected validation error, `Elapsed time must be greater than zero.` It therefore stopped before provider creation; a follow-up GET remained empty. No Notion row was written.
+- Production deployment `dpl_AY9hNU7MwmccSEqzoyp6xoXs5XkP` built successfully, is Ready, and is aliased to `https://afp-workspace-invoice.vercel.app`. Anonymous access returns 401. Health reports Notion mode, SQLite disabled, `NOTION_SYNC_ENABLED=false`, Basic Auth, and no errors or warnings.
+- No production Hours POST or automatic smoke test was run. No Notion write, source-record change, live schema change, or historical import occurred during implementation, verification, or deployment.
+
+---
+
 ## 2026-07-10 — Phase 9: Production Settings empty-client fix (Codex)
 
 ### Root cause and behavior change

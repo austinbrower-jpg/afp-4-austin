@@ -17,6 +17,7 @@ import type { HoursEntryInput } from "../lib/types";
 import type { TimerStopResult } from "../lib/timer-store";
 import { useHoursTimerStore } from "../lib/timer-store";
 import type { AppDataSourceMode } from "@/lib/data/runtime-config";
+import { hoursSaveErrorMessage } from "../lib/save-error";
 
 /**
  * Shown after Stop is pressed in timer mode. Date/start/end are locked to
@@ -78,8 +79,8 @@ export function TimerStopDialog({
       toast.success(dataSourceMode === "notion" ? "Saved to Notion" : "Timer entry saved");
       resetTimerDraft();
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to save timer entry");
+    } catch (error) {
+      toast.error(hoursSaveErrorMessage(error, "Failed to save timer entry"));
     }
   }
 
