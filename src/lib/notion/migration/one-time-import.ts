@@ -413,7 +413,7 @@ function emptyResult(runId: string, startedAt: string, overrides: Partial<Import
  * an existing row. Safe to call on every run - a no-op once the schema is
  * already in place.
  */
-async function applySchemaSetup(
+export async function applySchemaSetup(
   notion: NotionWriteClient,
   preflight: PreflightReport,
 ): Promise<Array<{ type: RecordType; property: string }>> {

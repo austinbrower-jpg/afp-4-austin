@@ -1,5 +1,117 @@
 # Dev Updates
 
+## 2026-07-10 ~02:40 CT — Phase 6 follow-up: live Notion schema prepared (schema only, no records, Claude Code)
+
+**AI model:** Claude Sonnet 5 (Claude Code)
+
+### Summary
+
+Applied the two additive Notion properties the historical import needs to
+the four live databases, per the user's explicit instruction. **No
+client/project/hours/work-log record was created** and the confirmation-
+phrase-gated `POST /api/notion/migration-import` endpoint was never called
+- only the already-tested, already-exported `applySchemaSetup()` function
+from `src/lib/notion/migration/one-time-import.ts` ran, invoked from a new
+standalone script outside the Next.js app. `NOTION_SYNC_ENABLED` was not
+touched (still unset/false).
+
+### Why a standalone script, not the app itself
+
+`src/lib/notion/client.ts`/`config.ts` are `import "server-only"`, which
+throws immediately outside a bundler's react-server condition - so a plain
+script can't import them directly (same reason `one-time-import.ts` takes
+its Notion client as an injected parameter rather than constructing one
+internally). `scripts/apply-migration-schema.ts` (new, uncommitted -
+see below) instead: constructs a real `@notionhq/client` `Client` directly
+from `NOTION_API_KEY`, re-derives the six-database readiness check using
+the already-pure `schema-requirements.ts` (`validateProperties`/
+`isSchemaValid`, same logic `verifyNotionDatabases()` uses), then calls the
+real, tested `runPreflight()` and `applySchemaSetup()` from
+`one-time-import.ts` - so the actual write logic exercised is identical to
+what the app would run, not a reimplementation.
+
+### What was added (additive only, verified read-only first)
+
+| Property | Type | Databases |
+|---|---|---|
+| `Migration Key` | `rich_text` | Clients, Projects, Hours Worked, Work Done |
+| `Project` | `relation` → Projects | Hours Worked, Work Done |
+
+Ran `scripts/apply-migration-schema.ts` (`node --env-file=.env.local
+node_modules/.bin/tsx scripts/apply-migration-schema.ts`, real
+`NOTION_API_KEY`/database ids from `.env.local`): BEFORE state showed all
+four `migrationKeyPropertyPresent: false` and both relevant
+`projectRelationPropertyPresent: false` - confirming this was genuinely the
+first schema-setup run. Six `dataSources.update` calls applied all six
+missing properties (2 Migration-Key-only for client/project, 2x
+Migration-Key-plus-Project-relation for hours/worklog). AFTER state showed
+all `migrationKeyPropertyPresent: true` / `projectRelationPropertyPresent:
+true` and `existingByKey` still empty (0) - zero records exist.
+
+### Verification against the real app endpoints (not just the script)
+
+1. **`GET /api/notion/verify-databases`** (existing Phase 3/4 read-only
+   check, unmodified): all six databases still `configured: true,
+   accessible: true, schemaValid: true`, zero invalid properties - the two
+   new additive properties didn't break the general-sync schema contract
+   (they're additional columns `NOTION_PROPERTY_REQUIREMENTS` doesn't
+   require, so they're invisible to that check by design).
+2. **`GET /api/notion/migration-import/preflight`** (the real route):
+   `ready: true`, all 10 checks passing, `schemaSetup` showing all four
+   entities' `migrationKeyPropertyPresent: true` (hours/worklog also
+   `projectRelationPropertyPresent: true`), **`existingByKey.length === 0`**
+   (duplicate count zero, as required), proposed counts unchanged at
+   **1 client / 3 projects / 5 hours / 2 work logs**, totals unchanged at
+   **10.37 billable hours / 2.00 non-billable hours / $311.00**
+   (`matchesSourceStated: true`, `discrepancies: []`).
+3. Checked `preview_console_logs` (error level) and `preview_network`
+   (failed requests) after both calls - zero errors, zero failures.
+4. Reviewed the full network log: the only requests to
+   `/api/notion/migration-import*` were the one `GET .../preflight` call -
+   **no `POST /api/notion/migration-import` was made**, confirmed directly
+   in the log, not just by omission.
+
+### Code changes
+
+- `src/lib/notion/migration/one-time-import.ts` - `applySchemaSetup` marked
+  `export` (was module-private) so the standalone script could call the
+  exact same function `runImport()` uses internally, rather than
+  duplicating its logic. No behavior change.
+- `scripts/apply-migration-schema.ts` (new) - the standalone schema-setup
+  script described above. Refuses to run if `NOTION_SYNC_ENABLED=true` or
+  `NOTION_API_KEY` is unset; no-ops cleanly (prints "Nothing to apply") if
+  every property is already present, so it's safe to re-run.
+
+### Final verification suite
+
+- `npm run lint` - pass (0 errors, 0 warnings).
+- `npm run typecheck` - pass.
+- `npm test` - pass (158/158 - unchanged; no test files were touched this
+  pass, only a visibility keyword and a new standalone script outside the
+  app's test scope).
+- `npm run build` - pass; same 27 routes as the last Phase 6 commit.
+
+### Confirmations
+
+- **`NOTION_SYNC_ENABLED` remains false** - untouched, and the script
+  itself refuses to run otherwise.
+- **Zero records created** - `existingByKey.length === 0` confirmed live,
+  twice (once via the script's own AFTER check, once via the real
+  `/api/notion/migration-import/preflight` endpoint).
+- **The import POST endpoint was never called** - confirmed via the live
+  network log.
+- **Only additive changes were made** - two new properties, on four
+  databases; no existing property was renamed, removed, retyped, or
+  reconfigured (confirmed by `verify-databases` still reporting
+  `schemaValid: true` with zero invalid properties against the unchanged
+  `NOTION_PROPERTY_REQUIREMENTS` contract).
+- **Not committed.** `applySchemaSetup`'s new `export` keyword and
+  `scripts/apply-migration-schema.ts` are uncommitted, working-tree
+  changes - this turn's instructions didn't ask for a commit. Awaiting
+  explicit approval before running the real record-creation import.
+
+---
+
 ## 2026-07-10 ~01:20 CT — Phase 6: one-time historical Notion import built (not executed, Claude Code)
 
 **AI model:** Claude Sonnet 5 (Claude Code)
