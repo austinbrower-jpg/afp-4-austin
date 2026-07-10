@@ -24,18 +24,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { todayISO } from "@/lib/calculations";
 import type { Project } from "@/types/domain";
 import { useCreateWorkLog } from "../hooks/use-work-logs";
 import { PRIORITY_LABEL, PRIORITY_OPTIONS, STATUS_LABEL, STATUS_OPTIONS } from "./status-priority";
+import type { AppDataSourceMode } from "@/lib/data/runtime-config";
 
 interface WorkLogFormDialogProps {
   projects: Project[];
+  dataSourceMode: AppDataSourceMode;
 }
 
 const NO_PROJECT = "__none__";
 
-export function WorkLogFormDialog({ projects }: WorkLogFormDialogProps) {
+export function WorkLogFormDialog({ projects, dataSourceMode }: WorkLogFormDialogProps) {
   const router = useRouter();
   const { mutate: createWorkLog, isPending } = useCreateWorkLog();
   const [open, setOpen] = useState(false);
@@ -46,6 +49,13 @@ export function WorkLogFormDialog({ projects }: WorkLogFormDialogProps) {
   const [status, setStatus] = useState<string>("not-started");
   const [priority, setPriority] = useState<string>("medium");
   const [summary, setSummary] = useState("");
+  const [invoiceDescription, setInvoiceDescription] = useState("");
+  const [detailedWorkDescription, setDetailedWorkDescription] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
+  const [evidenceLinks, setEvidenceLinks] = useState("");
+  const [clientVisible, setClientVisible] = useState(false);
+  const [includeInInvoice, setIncludeInInvoice] = useState(false);
+  const [includeInWorkReport, setIncludeInWorkReport] = useState(false);
 
   const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
 
@@ -56,6 +66,13 @@ export function WorkLogFormDialog({ projects }: WorkLogFormDialogProps) {
     setStatus("not-started");
     setPriority("medium");
     setSummary("");
+    setInvoiceDescription("");
+    setDetailedWorkDescription("");
+    setInternalNotes("");
+    setEvidenceLinks("");
+    setClientVisible(false);
+    setIncludeInInvoice(false);
+    setIncludeInWorkReport(false);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -72,10 +89,23 @@ export function WorkLogFormDialog({ projects }: WorkLogFormDialogProps) {
         status: status as never,
         priority: priority as never,
         summary,
+        invoiceDescription,
+        detailedWorkDescription,
+        detailedNotes: internalNotes,
+        internalNotes,
+        clientVisible,
+        includeInInvoice,
+        includeInWorkReport,
+        evidenceLinks: evidenceLinks.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
+        evidence: [],
+        relatedHoursIds: [],
+        relatedKnowledgeIds: [],
+        githubLink: null,
+        attachments: [],
       },
       {
         onSuccess: (created) => {
-          toast.success("Work log created");
+          toast.success(dataSourceMode === "notion" ? "Saved to Notion" : "Work log created");
           setOpen(false);
           reset();
           router.push(`/work-done/${created.id}`);
@@ -97,13 +127,12 @@ export function WorkLogFormDialog({ projects }: WorkLogFormDialogProps) {
         <Plus className="size-4" />
         New work log
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>New work log</DialogTitle>
             <DialogDescription>
-              Capture the basics now — you can fill in detailed notes, invoice
-              description, and related hours after creating it.
+              This form remains a local browser draft until you explicitly {dataSourceMode === "notion" ? "save it to Notion" : "create it"}.
             </DialogDescription>
           </DialogHeader>
 
@@ -116,6 +145,41 @@ export function WorkLogFormDialog({ projects }: WorkLogFormDialogProps) {
               placeholder="e.g. Rebuild invoice PDF export"
               autoFocus
             />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="wl-invoice-description">Invoice Description</Label>
+              <Textarea id="wl-invoice-description" value={invoiceDescription} onChange={(event) => setInvoiceDescription(event.target.value)} className="min-h-28" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="wl-detailed-work">Detailed Work Description</Label>
+              <Textarea id="wl-detailed-work" value={detailedWorkDescription} onChange={(event) => setDetailedWorkDescription(event.target.value)} className="min-h-28" />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="wl-internal-notes">Internal Notes</Label>
+            <Textarea id="wl-internal-notes" value={internalNotes} onChange={(event) => setInternalNotes(event.target.value)} className="min-h-24" />
+            <p className="text-xs text-muted-foreground">Never included in client-facing exports.</p>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="wl-evidence-links">Evidence Links</Label>
+            <Textarea id="wl-evidence-links" value={evidenceLinks} onChange={(event) => setEvidenceLinks(event.target.value)} placeholder="One URL or evidence note per line" />
+          </div>
+
+          <div className="grid gap-2 rounded-lg border p-3 text-sm sm:grid-cols-3">
+            <label className="flex items-center gap-2"><Checkbox checked={clientVisible} onCheckedChange={(checked) => {
+              const visible = checked === true;
+              setClientVisible(visible);
+              if (!visible) {
+                setIncludeInInvoice(false);
+                setIncludeInWorkReport(false);
+              }
+            }} />Client Visible</label>
+            <label className="flex items-center gap-2"><Checkbox checked={includeInInvoice} onCheckedChange={(checked) => setIncludeInInvoice(checked === true)} disabled={!clientVisible} />Include in Invoice</label>
+            <label className="flex items-center gap-2"><Checkbox checked={includeInWorkReport} onCheckedChange={(checked) => setIncludeInWorkReport(checked === true)} disabled={!clientVisible} />Include in Work Report</label>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -198,7 +262,7 @@ export function WorkLogFormDialog({ projects }: WorkLogFormDialogProps) {
 
           <DialogFooter>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Creating…" : "Create work log"}
+              {isPending ? "Saving…" : dataSourceMode === "notion" ? "Save to Notion" : "Create work log"}
             </Button>
           </DialogFooter>
         </form>

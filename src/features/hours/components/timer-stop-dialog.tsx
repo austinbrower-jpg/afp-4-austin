@@ -15,6 +15,8 @@ import { useCreateHoursEntry } from "../hooks/use-hours";
 import { HoursEntryFormFields, type ProjectOption, type WorkLogOption } from "./hours-entry-form-fields";
 import type { HoursEntryInput } from "../lib/types";
 import type { TimerStopResult } from "../lib/timer-store";
+import { useHoursTimerStore } from "../lib/timer-store";
+import type { AppDataSourceMode } from "@/lib/data/runtime-config";
 
 /**
  * Shown after Stop is pressed in timer mode. Date/start/end are locked to
@@ -28,6 +30,7 @@ export function TimerStopDialog({
   defaultHourlyRate,
   projects,
   workLogs,
+  dataSourceMode,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -35,6 +38,7 @@ export function TimerStopDialog({
   defaultHourlyRate: number;
   projects: ProjectOption[];
   workLogs: WorkLogOption[];
+  dataSourceMode: AppDataSourceMode;
 }) {
   const [values, setValues] = useState<HoursEntryInput | null>(null);
   // Populate the form exactly when the dialog transitions from closed to
@@ -61,6 +65,7 @@ export function TimerStopDialog({
   }
 
   const createMutation = useCreateHoursEntry();
+  const resetTimerDraft = useHoursTimerStore((state) => state.reset);
 
   function patch(update: Partial<HoursEntryInput>) {
     setValues((prev) => (prev ? { ...prev, ...update } : prev));
@@ -70,7 +75,8 @@ export function TimerStopDialog({
     if (!values) return;
     try {
       await createMutation.mutateAsync({ ...values, source: "timer" });
-      toast.success("Timer entry saved");
+      toast.success(dataSourceMode === "notion" ? "Saved to Notion" : "Timer entry saved");
+      resetTimerDraft();
       onOpenChange(false);
     } catch {
       toast.error("Failed to save timer entry");
@@ -85,7 +91,7 @@ export function TimerStopDialog({
           <DialogDescription>
             {capture
               ? `Logged ${capture.date} · ${capture.startTime}–${capture.endTime}. Fill in the details before saving.`
-              : "Fill in the details before saving."}
+              : "Fill in the draft details before saving."}
           </DialogDescription>
         </DialogHeader>
 
@@ -101,10 +107,10 @@ export function TimerStopDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={createMutation.isPending}>
-            Discard
+            Keep Draft
           </Button>
           <Button onClick={handleSave} disabled={createMutation.isPending || !values}>
-            {createMutation.isPending ? "Saving…" : "Save Entry"}
+            {createMutation.isPending ? "Saving…" : dataSourceMode === "notion" ? "Save to Notion" : "Save Entry"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,76 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  initDb,
-  projectRepo,
-  listHoursByProject,
-  listWorkLogsByProject,
-  nowISO,
-} from "@/lib/db";
-import { knowledgeRepo } from "@/lib/db/repositories/knowledge";
-import type { Priority, Project, ProjectStatus } from "@/types/domain";
-import { syncEntityNow } from "@/lib/notion/sync-engine";
+import { getDataProvider } from "@/lib/data/provider";
+import { dataErrorResponse, NO_STORE_HEADERS } from "@/lib/data/route-utils";
+import { projectInputSchema, validationMessages } from "@/lib/data/validation";
+import type { Project } from "@/types/domain";
 
-const STATUSES: ProjectStatus[] = ["active", "on-hold", "completed", "archived"];
-const PRIORITIES: Priority[] = ["low", "medium", "high", "urgent"];
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+type Context = { params: Promise<{ id: string }> };
 
-type RouteContext = { params: Promise<{ id: string }> };
-
-export async function GET(_request: NextRequest, { params }: RouteContext) {
-  initDb();
-  const { id } = await params;
-
-  const project = projectRepo.findById(id);
-  if (!project) {
-    return NextResponse.json({ error: "Project not found" }, { status: 404 });
-  }
-
-  const hours = listHoursByProject(id);
-  const workLogs = listWorkLogsByProject(id);
-  const knowledge = knowledgeRepo.where("project_id = ?", [id], "title ASC");
-
-  return NextResponse.json({ project, hours, workLogs, knowledge });
+export async function GET(_request: NextRequest, { params }: Context) {
+  try {
+    const provider = await getDataProvider();
+    const { id } = await params;
+    const [project, hours, workLogs, knowledge] = await Promise.all([
+      provider.projects.findById(id), provider.hours.list(), provider.workLogs.list(), provider.knowledge.list(),
+    ]);
+    if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
+    return NextResponse.json({
+      project,
+      hours: hours.filter((entry) => entry.projectId === id),
+      workLogs: workLogs.filter((entry) => entry.projectId === id),
+      knowledge: knowledge.filter((entry) => entry.projectId === id),
+    }, { headers: NO_STORE_HEADERS });
+  } catch (error) { return dataErrorResponse(error); }
+}
+export async function PATCH(request: NextRequest, { params }: Context) {
+  try {
+    const provider = await getDataProvider();
+    const { id } = await params;
+    const existing = await provider.projects.findById(id);
+    if (!existing) return NextResponse.json({ error: "Project not found." }, { status: 404 });
+    const parsed = projectInputSchema.safeParse({ ...existing, ...(await request.json().catch(() => null)) });
+    if (!parsed.success) return NextResponse.json({ error: "Invalid project.", details: validationMessages(parsed.error) }, { status: 400 });
+    const updated: Project = { ...existing, ...parsed.data, updatedAt: new Date().toISOString() };
+    const saved = await provider.projects.update(id, updated);
+    return NextResponse.json({ ...saved.entity, persistence: saved }, { headers: NO_STORE_HEADERS });
+  } catch (error) { return dataErrorResponse(error); }
 }
 
-export async function PATCH(request: NextRequest, { params }: RouteContext) {
-  initDb();
-  const { id } = await params;
-
-  const existing = projectRepo.findById(id);
-  if (!existing) {
-    return NextResponse.json({ error: "Project not found" }, { status: 404 });
-  }
-
-  const body = await request.json().catch(() => ({}));
-
-  const updated: Project = {
-    ...existing,
-    name: typeof body.name === "string" && body.name.trim() ? body.name.trim() : existing.name,
-    description: typeof body.description === "string" ? body.description : existing.description,
-    status: STATUSES.includes(body.status) ? body.status : existing.status,
-    priority: PRIORITIES.includes(body.priority) ? body.priority : existing.priority,
-    color: typeof body.color === "string" && body.color ? body.color : existing.color,
-    tags: Array.isArray(body.tags)
-      ? body.tags.filter((t: unknown) => typeof t === "string")
-      : existing.tags,
-    notes: typeof body.notes === "string" ? body.notes : existing.notes,
-    updatedAt: nowISO(),
-  };
-
-  projectRepo.update(id, updated);
-  await syncEntityNow("project", id);
-
-  return NextResponse.json(updated);
-}
-
-export async function DELETE(_request: NextRequest, { params }: RouteContext) {
-  initDb();
-  const { id } = await params;
-
-  const existing = projectRepo.findById(id);
-  if (!existing) {
-    return NextResponse.json({ error: "Project not found" }, { status: 404 });
-  }
-
-  projectRepo.remove(id);
-  return NextResponse.json({ ok: true });
+export async function DELETE(_request: NextRequest, { params }: Context) {
+  try {
+    const provider = await getDataProvider();
+    await provider.projects.remove((await params).id);
+    return NextResponse.json({ ok: true });
+  } catch (error) { return dataErrorResponse(error); }
 }

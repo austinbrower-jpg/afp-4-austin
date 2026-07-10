@@ -7,12 +7,6 @@ import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { useBackgroundSync } from "@/features/notion-sync/hooks/use-sync-status";
-
-function BackgroundSync() {
-  useBackgroundSync();
-  return null;
-}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -21,7 +15,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         defaultOptions: {
           queries: {
             staleTime: 30_000,
-            refetchOnWindowFocus: false,
+            refetchOnWindowFocus: true,
           },
         },
       }),
@@ -37,7 +31,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider delay={200}>
           <SidebarProvider>
-            <BackgroundSync />
             {children}
             <Toaster />
           </SidebarProvider>

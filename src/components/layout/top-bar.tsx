@@ -3,7 +3,7 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { GlobalSearch } from "@/features/search/components/global-search";
-import { SyncStatusBadge } from "@/features/notion-sync/components/sync-status-badge";
+import { DataSourceBadge } from "@/features/runtime/components/data-source-badge";
 import { ThemeToggle } from "./theme-toggle";
 
 export function TopBar() {
@@ -14,7 +14,7 @@ export function TopBar() {
       <div className="flex-1" />
       <GlobalSearch />
       <Separator orientation="vertical" className="mx-1 h-4" />
-      <SyncStatusBadge />
+      <DataSourceBadge />
       <ThemeToggle />
     </header>
   );

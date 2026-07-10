@@ -1,7 +1,7 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { Pencil, Timer, Trash2, User } from "lucide-react";
+import { ExternalLink, Pencil, Timer, Trash2, User } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -29,11 +29,13 @@ export function HoursTable({
   isLoading,
   onEdit,
   onDelete,
+  allowDelete = true,
 }: {
   entries: HoursEntryWithRelations[];
   isLoading?: boolean;
   onEdit: (entry: HoursEntryWithRelations) => void;
   onDelete: (entry: HoursEntryWithRelations) => void;
+  allowDelete?: boolean;
 }) {
   return (
     <div className="rounded-xl ring-1 ring-foreground/10">
@@ -110,14 +112,15 @@ export function HoursTable({
                         <User className="size-3" />
                       )}
                     </Badge>
+                    {entry.notionUrl && <Button variant="ghost" size="icon-sm" nativeButton={false} render={<a href={entry.notionUrl} target="_blank" rel="noreferrer" />}><ExternalLink /><span className="sr-only">Open saved Notion entry</span></Button>}
                     <Button variant="ghost" size="icon-sm" onClick={() => onEdit(entry)}>
                       <Pencil />
                       <span className="sr-only">Edit</span>
                     </Button>
-                    <Button variant="ghost" size="icon-sm" onClick={() => onDelete(entry)}>
+                    {allowDelete && <Button variant="ghost" size="icon-sm" onClick={() => onDelete(entry)}>
                       <Trash2 />
                       <span className="sr-only">Delete</span>
-                    </Button>
+                    </Button>}
                   </div>
                 </TableCell>
               </TableRow>

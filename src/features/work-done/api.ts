@@ -16,6 +16,12 @@ export interface WorkLogInput {
   evidence: string[];
   githubLink: string | null;
   attachments: Attachment[];
+  detailedWorkDescription: string;
+  internalNotes: string;
+  clientVisible: boolean;
+  includeInInvoice: boolean;
+  includeInWorkReport: boolean;
+  evidenceLinks: string[];
 }
 
 export interface WorkLogListFilters {

@@ -13,11 +13,11 @@ export function HoursTimerCard({ onStopped }: { onStopped: (capture: TimerStopRe
   const start = useHoursTimerStore((s) => s.start);
   const stop = useHoursTimerStore((s) => s.stop);
   const reset = useHoursTimerStore((s) => s.reset);
+  const stoppedDraft = useHoursTimerStore((s) => s.stoppedDraft);
   const elapsedSeconds = useElapsedSeconds();
 
   function handleStop() {
     const capture = stop();
-    reset();
     if (capture) onStopped(capture);
   }
 
@@ -35,7 +35,7 @@ export function HoursTimerCard({ onStopped }: { onStopped: (capture: TimerStopRe
             <div className="text-xs text-muted-foreground">
               {isRunning
                 ? `Started at ${startTime} · ${formatElapsed(elapsedSeconds)} elapsed`
-                : "Track a live shift, then confirm the details when you stop."}
+                : stoppedDraft ? `Stopped draft · ${stoppedDraft.startTime}–${stoppedDraft.endTime} · not saved` : "Track a live shift, then confirm the details when you stop."}
             </div>
           </div>
         </div>
@@ -45,6 +45,11 @@ export function HoursTimerCard({ onStopped }: { onStopped: (capture: TimerStopRe
             <Square className="size-3.5" />
             Stop
           </Button>
+        ) : stoppedDraft ? (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={reset}>Discard Draft</Button>
+            <Button size="sm" onClick={() => onStopped(stoppedDraft)}>Review Draft</Button>
+          </div>
         ) : (
           <Button size="sm" onClick={start}>
             <Play className="size-3.5" />

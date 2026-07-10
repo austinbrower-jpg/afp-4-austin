@@ -19,7 +19,8 @@ export type NotionPropertyType =
   | "number"
   | "checkbox"
   | "date"
-  | "url";
+  | "url"
+  | "relation";
 
 export interface PropertyRequirement {
   /** Domain field name (matches the key in mappers.ts's NOTION_SCHEMA). */
@@ -29,6 +30,31 @@ export interface PropertyRequirement {
   /** Notion property type expected for that column. */
   expectedType: NotionPropertyType;
 }
+
+export interface ProposedSchemaChange {
+  entity: "worklog" | "knowledge";
+  databaseLabel: string;
+  notionName: string;
+  expectedType: NotionPropertyType;
+  status: "proposed" | "deferred";
+  reason?: string;
+}
+
+/** Additive Phase 8 preview. No schema mutation implementation exists. */
+export const PROPOSED_NOTION_SCHEMA_CHANGES: ProposedSchemaChange[] = [
+  { entity: "worklog", databaseLabel: "Work Done", notionName: "Client Visible", expectedType: "checkbox", status: "proposed" },
+  { entity: "worklog", databaseLabel: "Work Done", notionName: "Include in Invoice", expectedType: "checkbox", status: "proposed" },
+  { entity: "worklog", databaseLabel: "Work Done", notionName: "Include in Work Report", expectedType: "checkbox", status: "proposed" },
+  { entity: "worklog", databaseLabel: "Work Done", notionName: "Detailed Work Description", expectedType: "rich_text", status: "proposed" },
+  { entity: "worklog", databaseLabel: "Work Done", notionName: "Internal Notes", expectedType: "rich_text", status: "proposed" },
+  { entity: "worklog", databaseLabel: "Work Done", notionName: "Evidence Links", expectedType: "rich_text", status: "proposed" },
+  { entity: "worklog", databaseLabel: "Work Done", notionName: "Related Hours", expectedType: "relation", status: "deferred", reason: "Deferred until the existing Hours relation can be confirmed without altering live schema." },
+  { entity: "knowledge", databaseLabel: "Knowledge", notionName: "Client Visible", expectedType: "checkbox", status: "proposed" },
+  { entity: "knowledge", databaseLabel: "Knowledge", notionName: "Include in Work Report", expectedType: "checkbox", status: "proposed" },
+  { entity: "knowledge", databaseLabel: "Knowledge", notionName: "Report Summary", expectedType: "rich_text", status: "proposed" },
+  { entity: "knowledge", databaseLabel: "Knowledge", notionName: "Project", expectedType: "relation", status: "proposed" },
+  { entity: "knowledge", databaseLabel: "Knowledge", notionName: "Source Page", expectedType: "url", status: "proposed" },
+];
 
 export const NOTION_PROPERTY_REQUIREMENTS: Record<SyncEntityType, PropertyRequirement[]> = {
   client: [
@@ -59,6 +85,7 @@ export const NOTION_PROPERTY_REQUIREMENTS: Record<SyncEntityType, PropertyRequir
     { field: "billable", notionName: "Billable", expectedType: "checkbox" },
     { field: "location", notionName: "Location", expectedType: "rich_text" },
     { field: "notes", notionName: "Notes", expectedType: "rich_text" },
+    { field: "project", notionName: "Project", expectedType: "relation" },
   ],
   worklog: [
     { field: "title", notionName: "Title", expectedType: "title" },
@@ -68,11 +95,22 @@ export const NOTION_PROPERTY_REQUIREMENTS: Record<SyncEntityType, PropertyRequir
     { field: "summary", notionName: "Summary", expectedType: "rich_text" },
     { field: "invoiceDescription", notionName: "Invoice Description", expectedType: "rich_text" },
     { field: "githubLink", notionName: "GitHub Link", expectedType: "url" },
+    { field: "clientVisible", notionName: "Client Visible", expectedType: "checkbox" },
+    { field: "includeInInvoice", notionName: "Include in Invoice", expectedType: "checkbox" },
+    { field: "includeInWorkReport", notionName: "Include in Work Report", expectedType: "checkbox" },
+    { field: "detailedWorkDescription", notionName: "Detailed Work Description", expectedType: "rich_text" },
+    { field: "internalNotes", notionName: "Internal Notes", expectedType: "rich_text" },
+    { field: "evidenceLinks", notionName: "Evidence Links", expectedType: "rich_text" },
   ],
   knowledge: [
     { field: "title", notionName: "Title", expectedType: "title" },
     { field: "type", notionName: "Type", expectedType: "select" },
     { field: "tags", notionName: "Tags", expectedType: "multi_select" },
+    { field: "clientVisible", notionName: "Client Visible", expectedType: "checkbox" },
+    { field: "includeInWorkReport", notionName: "Include in Work Report", expectedType: "checkbox" },
+    { field: "reportSummary", notionName: "Report Summary", expectedType: "rich_text" },
+    { field: "project", notionName: "Project", expectedType: "relation" },
+    { field: "sourcePage", notionName: "Source Page", expectedType: "url" },
   ],
   invoice: [
     { field: "title", notionName: "Invoice Number", expectedType: "title" },

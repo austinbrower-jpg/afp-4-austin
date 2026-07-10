@@ -15,15 +15,18 @@ import { HoursEntryDialog } from "./hours-entry-dialog";
 import { TimerStopDialog } from "./timer-stop-dialog";
 import { DeleteEntryDialog } from "./delete-entry-dialog";
 import type { ProjectOption, WorkLogOption } from "./hours-entry-form-fields";
+import type { AppDataSourceMode } from "@/lib/data/runtime-config";
 
 export function HoursWorkspace({
   projects,
   workLogs,
   defaultHourlyRate,
+  dataSourceMode,
 }: {
   projects: ProjectOption[];
   workLogs: WorkLogOption[];
   defaultHourlyRate: number;
+  dataSourceMode: AppDataSourceMode;
 }) {
   const [range, setRange] = useState<HoursRangeKey>("this-week");
 
@@ -79,6 +82,7 @@ export function HoursWorkspace({
         isLoading={isLoading}
         onEdit={openEditDialog}
         onDelete={setDeleteTarget}
+        allowDelete={dataSourceMode === "mock"}
       />
 
       <HoursEntryDialog
@@ -88,6 +92,7 @@ export function HoursWorkspace({
         defaultHourlyRate={defaultHourlyRate}
         projects={projects}
         workLogs={workLogs}
+        dataSourceMode={dataSourceMode}
       />
 
       <TimerStopDialog
@@ -100,9 +105,10 @@ export function HoursWorkspace({
         defaultHourlyRate={defaultHourlyRate}
         projects={projects}
         workLogs={workLogs}
+        dataSourceMode={dataSourceMode}
       />
 
-      <DeleteEntryDialog entry={deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)} />
+      {dataSourceMode === "mock" && <DeleteEntryDialog entry={deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)} />}
     </div>
   );
 }

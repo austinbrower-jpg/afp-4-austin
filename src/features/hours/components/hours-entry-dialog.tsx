@@ -16,6 +16,7 @@ import { useCreateHoursEntry, useUpdateHoursEntry } from "../hooks/use-hours";
 import { HoursEntryFormFields, type ProjectOption, type WorkLogOption } from "./hours-entry-form-fields";
 import type { HoursEntryInput } from "../lib/types";
 import type { HoursEntryWithRelations } from "../lib/types";
+import type { AppDataSourceMode } from "@/lib/data/runtime-config";
 
 function blankValues(defaultHourlyRate: number): HoursEntryInput {
   return {
@@ -56,6 +57,7 @@ export function HoursEntryDialog({
   defaultHourlyRate,
   projects,
   workLogs,
+  dataSourceMode,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -64,6 +66,7 @@ export function HoursEntryDialog({
   defaultHourlyRate: number;
   projects: ProjectOption[];
   workLogs: WorkLogOption[];
+  dataSourceMode: AppDataSourceMode;
 }) {
   const [values, setValues] = useState<HoursEntryInput>(() =>
     entry ? valuesFromEntry(entry) : blankValues(defaultHourlyRate),
@@ -93,10 +96,10 @@ export function HoursEntryDialog({
     try {
       if (isEdit && entry) {
         await updateMutation.mutateAsync({ id: entry.id, input: values });
-        toast.success("Hours entry updated");
+        toast.success(dataSourceMode === "notion" ? "Saved to Notion" : "Hours entry updated");
       } else {
         await createMutation.mutateAsync({ ...values, source: "manual" });
-        toast.success("Hours entry added");
+        toast.success(dataSourceMode === "notion" ? "Saved to Notion" : "Hours entry added");
       }
       onOpenChange(false);
     } catch {
@@ -112,7 +115,7 @@ export function HoursEntryDialog({
           <DialogDescription>
             {isEdit
               ? "Update the details of this time entry."
-              : "Manually log a block of time worked."}
+              : dataSourceMode === "notion" ? "This remains a draft until you explicitly save it to Notion." : "Manually log a block of time worked."}
           </DialogDescription>
         </DialogHeader>
 
@@ -128,7 +131,7 @@ export function HoursEntryDialog({
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? "Saving…" : isEdit ? "Save Changes" : "Add Entry"}
+            {isSaving ? "Saving…" : dataSourceMode === "notion" ? "Save to Notion" : isEdit ? "Save Changes" : "Add Entry"}
           </Button>
         </DialogFooter>
       </DialogContent>

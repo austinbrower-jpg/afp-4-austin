@@ -13,10 +13,11 @@ import {
   openPrintReport,
 } from "../lib/export";
 
-export function ReportExportActions({ report }: { report: ReportDocument }) {
+export function ReportExportActions({ report, onExport }: { report: ReportDocument; onExport?: () => void }) {
   const copy = async () => {
     try {
       await copyReportMarkdown(report);
+      onExport?.();
       toast.success("Markdown copied to clipboard");
     } catch {
       toast.error("Clipboard access was not available");
@@ -24,16 +25,16 @@ export function ReportExportActions({ report }: { report: ReportDocument }) {
   };
   const print = () => {
     if (!openPrintReport(report)) toast.error("Allow pop-ups to open the print-friendly report");
+    else onExport?.();
   };
   return (
     <div className="flex flex-wrap gap-2">
-      <Button size="sm" onClick={() => downloadReportPdf(report)}><FileDown />PDF</Button>
+      <Button size="sm" onClick={() => { downloadReportPdf(report); onExport?.(); }}><FileDown />PDF</Button>
       <Button size="sm" variant="outline" onClick={print}><Printer />Print HTML</Button>
-      <Button size="sm" variant="outline" onClick={() => downloadReportHtml(report)}><FileCode2 />HTML</Button>
-      <Button size="sm" variant="outline" onClick={() => downloadReportMarkdown(report)}><Download />Markdown</Button>
+      <Button size="sm" variant="outline" onClick={() => { downloadReportHtml(report); onExport?.(); }}><FileCode2 />HTML</Button>
+      <Button size="sm" variant="outline" onClick={() => { downloadReportMarkdown(report); onExport?.(); }}><Download />Markdown</Button>
       <Button size="sm" variant="outline" onClick={copy}><Copy />Copy</Button>
-      <Button size="sm" variant="outline" onClick={() => downloadReportJson(report)}><Download />JSON</Button>
+      <Button size="sm" variant="outline" onClick={() => { downloadReportJson(report); onExport?.(); }}><Download />JSON</Button>
     </div>
   );
 }
-

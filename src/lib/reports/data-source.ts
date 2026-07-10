@@ -1,12 +1,6 @@
 import "server-only";
-import {
-  clientRepo,
-  hoursRepo,
-  initDb,
-  knowledgeRepo,
-  projectRepo,
-  workLogRepo,
-} from "@/lib/db";
+import { getDataProvider } from "@/lib/data/provider";
+import type { AppDataProvider } from "@/lib/data/provider-types";
 import {
   APPROVED_PROJECT_ASSIGNMENTS,
   APPROVED_WORK_LOG_PROJECTS,
@@ -200,28 +194,16 @@ function mapKnowledge(page: KnowledgePage): ReportKnowledgeRecord {
   };
 }
 
-function buildStoredDataset(source: "local-mock" | "notion"): ReportDataset {
-  const isSelected = (notionPageId: string | null) =>
-    source === "notion" ? notionPageId !== null : notionPageId === null;
-  const clients = clientRepo.all("name ASC").filter((record) => isSelected(record.notionPageId));
-  const clientIds = new Set(clients.map((client) => client.id));
-  const projects = projectRepo.all("name ASC").filter(
-    (record) => clientIds.has(record.clientId) && isSelected(record.notionPageId),
-  );
-  const hours = hoursRepo.all("date ASC, start_time ASC").filter(
-    (record) => clientIds.has(record.clientId) && isSelected(record.notionPageId),
-  );
-  const workLogs = workLogRepo.all("date ASC").filter(
-    (record) => clientIds.has(record.clientId) && isSelected(record.notionPageId),
-  );
-  const knowledge = knowledgeRepo.all("title ASC").filter(
-    (record) => record.clientId !== null && clientIds.has(record.clientId) && isSelected(record.notionPageId),
-  );
+async function buildStoredDataset(provider: AppDataProvider): Promise<ReportDataset> {
+  const source = provider.mode === "notion" ? "notion" : "local-mock";
+  const [clients, projects, hours, workLogs, knowledge] = await Promise.all([
+    provider.clients.list(), provider.projects.list(), provider.hours.list(), provider.workLogs.list(), provider.knowledge.list(),
+  ]);
   return {
     source,
     label: source === "notion" ? "Notion data" : "Local mock data",
     description: source === "notion"
-      ? "Cached rows whose source pages are in Notion; no live writes or mixed local rows."
+      ? "Fresh rows read directly from Notion for this request; no SQLite or mixed local rows."
       : "SQLite development records with the legacy client-facing description used as local visibility opt-in.",
     clients: clients.map((client) => ({
       id: client.id,
@@ -251,13 +233,15 @@ export interface ReportBuilderData {
   recommendedSource: ReportDataSource;
 }
 
-export function getReportBuilderData(): ReportBuilderData {
-  initDb();
-  const notion = buildStoredDataset("notion");
+export async function getReportBuilderData(): Promise<ReportBuilderData> {
+  const provider = await getDataProvider();
+  const current = await buildStoredDataset(provider);
   const historical = buildHistoricalDataset();
-  const local = buildStoredDataset("local-mock");
   return {
-    datasets: [notion, historical, local],
-    recommendedSource: notion.hours.length > 0 ? "notion" : "historical-preview",
+    datasets: [current, historical],
+    // Production must open on the live provider even when its databases are
+    // empty. The historical reconciliation stays available as an explicit,
+    // isolated preview dataset and is never a fallback for live data.
+    recommendedSource: current.source,
   };
 }

@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 const queryKey = ["report-settings"] as const;
 
-export function ReportSettingsCard() {
+export function ReportSettingsCard({ readOnly = false }: { readOnly?: boolean }) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey,
@@ -71,27 +71,27 @@ export function ReportSettingsCard() {
           ] as const).map(([key, label, placeholder]) => (
             <div className="space-y-1.5" key={key}>
               <Label htmlFor={`report-${key}`}>{label}</Label>
-              <Input id={`report-${key}`} value={form[key]} placeholder={placeholder} onChange={(event) => set(key, event.target.value)} />
+              <Input id={`report-${key}`} value={form[key]} placeholder={placeholder} disabled={readOnly} onChange={(event) => set(key, event.target.value)} />
             </div>
           ))}
           <div className="space-y-1.5">
             <Label htmlFor="report-rate">Default hourly rate</Label>
-            <Input id="report-rate" type="number" min="0" step="0.01" value={form.defaultHourlyRate} aria-invalid={invalidRate} onChange={(event) => set("defaultHourlyRate", Number(event.target.value))} />
+            <Input id="report-rate" type="number" min="0" step="0.01" value={form.defaultHourlyRate} aria-invalid={invalidRate} disabled={readOnly} onChange={(event) => set("defaultHourlyRate", Number(event.target.value))} />
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="report-address">Address</Label>
-            <Textarea id="report-address" className="min-h-24" value={form.address} onChange={(event) => set("address", event.target.value)} />
+            <Textarea id="report-address" className="min-h-24" value={form.address} disabled={readOnly} onChange={(event) => set("address", event.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="report-notes">Default invoice notes</Label>
-            <Textarea id="report-notes" className="min-h-24" value={form.defaultInvoiceNotes} onChange={(event) => set("defaultInvoiceNotes", event.target.value)} />
+            <Textarea id="report-notes" className="min-h-24" value={form.defaultInvoiceNotes} disabled={readOnly} onChange={(event) => set("defaultInvoiceNotes", event.target.value)} />
           </div>
         </div>
         <div className="flex justify-end gap-2">
           {isDirty && <Button variant="ghost" onClick={() => setForm({ ...data })}>Discard</Button>}
-          <Button disabled={!isDirty || invalidRate || mutation.isPending} onClick={() => mutation.mutate(form)}>
+          <Button disabled={readOnly || !isDirty || invalidRate || mutation.isPending} onClick={() => mutation.mutate(form)}>
             {mutation.isPending ? "Saving…" : "Save report settings"}
           </Button>
         </div>
@@ -99,4 +99,3 @@ export function ReportSettingsCard() {
     </Card>
   );
 }
-
