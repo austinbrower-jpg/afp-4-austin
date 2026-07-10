@@ -149,3 +149,69 @@ flipping the switch:
 
 This migration has **not** been run. Nothing above happens until you
 explicitly say to proceed and `NOTION_SYNC_ENABLED` is set to `true`.
+
+## Phase 5 — dry-run preview (built, no writes)
+
+Before Step 4 above is ever run for real, Settings → **Historical Migration
+Dry Run** (`/settings/migration-preview`, backed by `GET
+/api/notion/migration-preview`) shows exactly what that step would create:
+proposed client, projects, hours rows, and work-log rows, each with its
+source provenance, plus a from-scratch recalculation of totals (billable/
+non-billable hours, invoice amount, per-day, per-session) against what the
+Hours Worked/Work Done pages currently state about themselves.
+
+This preview makes **zero Notion API calls** (the source content is a
+transcribed, versioned fixture in `src/lib/notion/migration/source-data.ts`,
+not a live fetch) and **zero SQLite writes** (only reads, for duplicate
+detection - see `src/lib/notion/migration/read-existing.ts`). It is safe to
+run anytime, regardless of `NOTION_SYNC_ENABLED`, and produces the same
+output every time until the source fixture or local duplicate-candidate
+records change.
+
+### Approval checklist before enabling a one-time write mode
+
+A real (one-time) write migration has **not** been built yet - this phase
+intentionally stops at preview. Before anyone builds and runs that write
+path, the following must all be true:
+
+- [ ] **Every proposed hours row has been reviewed individually** (Settings
+      → Historical Migration Dry Run → Proposed hours table) - date, start/
+      end, hours, rate, billable status, location, and notes for all 5
+      historical sessions (1 non-billable onsite + 4 billable).
+- [ ] **Every project assignment has been reviewed**, including the rows the
+      dry run deliberately left unassigned (`hrs-2026-07-08-s1`,
+      `hrs-2026-07-08-s3` - generic/unmatched workstream text) and the one
+      flagged as an ambiguous multi-project match
+      (`hrs-2026-07-09-s1` - matches both BOL Review Process V2 and AFP
+      Command Center / Sales & Operations Hub, primary pick is BOL Review
+      Process V2). Confirm the intended project for each before a write
+      migration is built.
+- [ ] **Totals have been approved**, specifically the reconciled discrepancy
+      between the app's existing hour-rounding convention and the source
+      page's own exact-minute math ($311.10 app-convention vs. $311.00
+      exact-minute/source-stated, traced entirely to the July 8 2:05-5:00 PM
+      session). Decide which figure a real migration should store before it
+      is built, rather than defaulting silently.
+- [ ] **Duplicate protection is confirmed active**: the dry run's
+      `skipped`/`action: "skip-existing"` fields (keyed on client name;
+      project name; client+date+start+end for hours; client+date+title for
+      work logs) have been checked against the current local SQLite state
+      immediately before any write migration runs, so re-running it can't
+      create duplicate rows.
+- [ ] **The stale-header and multi-block warnings have been read and
+      accepted**: the July 9 page's own header text ("Started at 9:00 AM",
+      "Not finalized yet") is stale relative to its own later "End-of-Day
+      Shift Update" section (9:12 AM-2:00 PM, closed) - the dry run already
+      treats the closed figures as authoritative - and the July 9 work log's
+      invoice description is a concatenation of three separate "Invoice-
+      Ready" blocks from the source page.
+- [ ] **Explicit user approval to build and run a one-time write mode**,
+      naming which proposed records to include/exclude/edit, before any code
+      that calls `pages.create`, `pushEntity`, or SQLite `insert`/`update`
+      for this historical data is written. `NOTION_SYNC_ENABLED` must also
+      still be turned on deliberately per the Step 4 checklist above - the
+      dry-run approval above is in addition to that, not a replacement for
+      it.
+
+Until every box above is checked and the user has explicitly said to
+proceed, no write migration exists in this codebase to run.

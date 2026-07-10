@@ -1,5 +1,379 @@
 # Dev Updates
 
+## 2026-07-10 ~00:05 CT — Phase 5 follow-up: approved billing convention + project assignments applied (Claude Code)
+
+**AI model:** Claude Sonnet 5 (Claude Code)
+
+### Summary
+
+User reviewed the Phase 5 dry run below and approved four decisions; this
+pass updates the dry-run engine, tests, and UI to reflect them exactly, then
+runs the full verification suite and commits (not pushed). Still zero Notion
+writes, zero SQLite writes - only the preview's own analysis logic changed.
+
+### Decision 1 — billing convention
+
+Amounts are now computed strictly as `exactMinutes / 60 × hourlyRate`,
+rounding only the final dollar total to cents; per-entry `totalHours` is now
+the exact (unrounded) value rather than hours pre-rounded to hundredths.
+Concretely:
+
+- `ProposedHoursRecord.totalHours`/`.expectedAmount` are now the exact-minute
+  values (e.g. the July 8 2:05-5:00 PM row is `2.9166666667h` / `$87.50`).
+- The old app-convention figures (`computeTotalHours`→`computeAmount`, which
+  rounds hours to hundredths first) are retained only as clearly-labeled
+  `referenceAppRoundedHours`/`referenceAppRoundedAmount` fields - informational,
+  never used in any calculation.
+- `totals.totalInvoiceAmount` is now **exactly $311.00** (sum of exact
+  per-session hours × rate, rounded once), matching the historical Hours
+  Worked page. `totals.referenceAppConventionTotal` ($311.10) documents what
+  the rejected convention would have produced.
+- `totals.discrepancies` is now empty for this dataset - the earlier
+  reported $0.10 gap is resolved by this decision, not just noted.
+- New `billing-convention-approved` warning (info-severity), scoped to the
+  one row where the two conventions actually differ
+  (`hrs-2026-07-08-s2`), documents the decision and the rejected figure.
+
+### Decision 2 — project assignments
+
+Replaced the keyword-derived (partly ambiguous/unassigned) project matches
+with an explicit, user-approved table
+(`APPROVED_PROJECT_ASSIGNMENTS` in `source-data.ts`), which `dry-run.ts`'s
+`buildHours()` now prefers whenever a session has an entry:
+
+| Session | Project |
+|---|---|
+| 2026-07-08 09:00-11:00 (non-billable onsite) | none (explicit) |
+| 2026-07-08 11:00 AM-1:00 PM | BOL Review Process V2 |
+| 2026-07-08 2:05-5:00 PM | Power Automate Documentation |
+| 2026-07-08 5:10-5:49 PM | AFP Command Center / Sales & Operations Hub |
+| 2026-07-09 9:12 AM-2:00 PM | BOL Review Process V2 |
+
+The `unassigned-project`/`multi-project-session` warnings no longer fire for
+any of the five sessions (the fallback keyword-matching logic is retained
+for any future session without an explicit approval, but nothing here needs
+it now); a new `project-assignments-approved` info note covers all five
+instead, citing the 2026-07-10 approval.
+
+### Decision 3 — July 9 work log
+
+`APPROVED_WORK_LOG_PROJECTS` in `source-data.ts` sets `wl-2026-07-09`'s main
+`projectKey` to `bolReviewV2` and a new `relatedProjectKeys: [commandCenter,
+powerAutomateDocs]` field (added to `ProposedWorkLogRecord` in `types.ts`,
+since the domain `WorkLog` schema only supports a single `projectId` - this
+metadata is preserved in the *preview* record, flagged for the user rather
+than silently dropped if a real migration is built later). A generated
+`relatedProjectsNote` string and secondary "+ project" badges in the UI
+carry the same cross-reference into the visible summary. New
+`worklog-related-projects-preserved` info warning documents this.
+
+July 8's work log now spans **three** distinct approved projects (one per
+session) with no single "main" specified by the user for that day - left
+`projectKey: null` with `relatedProjectKeys` listing all three, reusing the
+existing `worklog-multi-project` warning code (reworded to info-severity
+since it's no longer an unresolved ambiguity, just a busy day). Flagged to
+the user as a judgment call, not something explicitly instructed.
+
+### Changes made
+
+- `src/lib/notion/migration/types.ts` - `ProposedHoursRecord`,
+  `ProposedWorkLogRecord`, `DayTotals`, `SessionTotal`, `ReconciliationTotals`
+  reshaped per the decisions above; `schemaVersion` bumped `1` → `2`.
+- `src/lib/notion/migration/source-data.ts` - added
+  `APPROVED_PROJECT_ASSIGNMENTS` and `APPROVED_WORK_LOG_PROJECTS`.
+- `src/lib/notion/migration/dry-run.ts` - `buildHours()`/`buildWorkLogs()`
+  now prefer the approved tables over keyword matching; `buildTotals()`
+  rewritten to sum exact hours × rate and round once; warning set updated
+  (`billing-convention-approved`, `project-assignments-approved`,
+  `worklog-related-projects-preserved` added; `rounding-convention-discrepancy`
+  retired in favor of the above).
+- `src/features/settings/migration-preview/components/migration-preview-view.tsx` -
+  removed the now-redundant "exact" vs "app" dual columns (a single
+  authoritative value per field now), added a "Billing convention (approved
+  2026-07-10)" explainer card, added related-project badges + note on work
+  logs, kept a small "(ref: $X)" annotation only on the one row where the
+  rejected convention would have differed.
+- `docs/notion-migration-plan.md` and this file - unchanged by this pass
+  (the Phase 5 approval checklist added last time already anticipated this
+  review step).
+
+### Tests updated (107/107 passing, net +2 from the prior pass)
+
+Rewrote `dry-run.test.ts` for the new shape and decisions: exact-hours as
+the proposed value, `$311.00` total with `discrepancies: []`, per-session
+approved project assertions (exact map of session id → project key),
+`referenceAppConventionTotal` still reporting $311.10 as reference-only, and
+the new July 8/July 9 related-project assertions.
+`calculations.test.ts`/`project-matcher.test.ts`/`no-write-path.test.ts`
+unchanged and still pass unmodified (the underlying `calculateSession`
+utility and keyword matcher didn't need to change - only how `dry-run.ts`
+uses their output changed).
+
+### Final verification suite
+
+- `npm run lint` - pass (0 errors, 0 warnings).
+- `npm run typecheck` - pass.
+- `npm test` - pass (107/107).
+- `npm run build` - pass; same 24 routes as the prior Phase 5 pass.
+
+### Browser verification performed
+
+Re-ran `/settings/migration-preview` end to end: Reconciliation card now
+shows a single `$311.00` (no exact/app split), the new "Billing convention
+(approved 2026-07-10)" card citing the rejected $311.10 reference, and no
+"Discrepancies found" callout (list is empty). Extracted the Proposed hours
+table's cell contents directly via DOM query to confirm every row against
+the approved-assignment table exactly: all five sessions matched their
+specified project (or "Unassigned" for the non-billable onsite row), and
+the `$87.50 (ref: $87.60)` annotation appears on exactly one row
+(`2026-07-08 14:05-17:00`) - nowhere else. Confirmed the July 8 work log
+shows "Unassigned" primary with three "+ project" badges, and July 9 shows
+"BOL Review Process V2" primary with "+ AFP Command Center..." and "+ Power
+Automate Documentation" badges plus the generated cross-reference note.
+Checked `preview_console_logs` at `error` level and `preview_network` for
+failed requests after every navigation - zero errors, zero failed requests.
+
+### Confirmations
+
+- No Notion API call and no SQLite write in this pass either - only the
+  pure analysis logic in `src/lib/notion/migration/` and its test/UI
+  callers changed.
+- `NOTION_SYNC_ENABLED` and `.env.local` untouched.
+- Committed this pass (see commit hash in the final report) - **not
+  pushed**, per instruction.
+
+---
+
+## 2026-07-09 ~23:15 CT — Phase 5: historical migration dry run (preview-only, Claude Code)
+
+**AI model:** Claude Sonnet 5 (Claude Code)
+
+### Summary
+
+Phase 5 per the user's brief: build a one-time migration **dry-run** system
+that previews exactly what migrating the historical AFP-Work Notion pages
+("Hours Worked", "Work Done" → "July 8, 2026" / "July 9, 2026") would create
+— proposed client/projects/hours/work-log records, fully reconciled totals,
+warnings, and duplicate detection — without performing any write. No Notion
+API call is made by this feature at all (the source content was read once,
+read-only, via Notion's search/fetch tools, then transcribed into a
+versioned fixture) and no SQLite row is inserted/updated/deleted anywhere in
+it. `NOTION_SYNC_ENABLED` stays unset/false throughout, untouched. Not
+committed yet — awaiting the user's review.
+
+### Source records read (read-only, via Notion search/fetch)
+
+| Page | Notion ID |
+|---|---|
+| Hours Worked | `3984259d-cffa-81be-930a-ca4ef072d72a` |
+| Work Done | `3984259d-cffa-81aa-a638-e428d0bcf252` |
+| July 8, 2026 | `3984259d-cffa-81a4-91d8-ca2e268546b5` |
+| July 9, 2026 | `3984259d-cffa-816a-9132-ff82206e7651` |
+
+Transcribed verbatim (times, workstream labels, notes, summaries,
+invoice-ready description blocks) into
+`src/lib/notion/migration/source-data.ts` so the dry-run engine is
+deterministic and testable without a live Notion connection.
+
+### What was built
+
+1. **`src/lib/notion/migration/`** (new directory, no `server-only` in the
+   engine files so it's directly unit-testable):
+   - `types.ts` — result shape (`MigrationDryRunResult`), proposed-record
+     types, provenance, warnings, reconciliation totals.
+   - `source-data.ts` — the transcribed fixture (raw sessions, raw work
+     logs, source-stated totals, the known stale-header/gap facts).
+   - `calculations.ts` — session-level time/rate math, reusing
+     `src/lib/calculations.ts`'s existing `minutesBetween`/
+     `computeTotalHours`/`computeAmount` rather than reimplementing rounding
+     rules. Computes both an "exact" (unrounded-hours) and an
+     "app-convention" (matches what the existing Hours flow would actually
+     store) figure per session, plus the discrepancy between them.
+   - `project-matcher.ts` — generic keyword-based project matcher
+     (candidates + priority order), independent of the AFP fixture so it's
+     testable with synthetic inputs.
+   - `dry-run.ts` — `buildMigrationDryRun()`: pure orchestration, no Notion
+     client, no SQLite, no `Date.now()`/`Math.random()`. Derives proposed
+     records, matches projects, reconciles totals, and generates warnings.
+   - `read-existing.ts` (`server-only`) — the *only* file here that touches
+     SQLite, and only via `repo.all()` reads, for duplicate detection.
+2. **`GET /api/notion/migration-preview`** — thin route: read-only snapshot
+   + `buildMigrationDryRun()`, wrapped in try/catch, `NextResponse.json`.
+3. **Settings UI** — new "Historical Migration Dry Run" card
+   (`migration-preview-card.tsx`) linking to a dedicated route,
+   `/settings/migration-preview` (`migration-preview-view.tsx`): source
+   pages, reconciliation (with a discrepancies callout), proposed
+   client/projects/hours/work-logs tables, warnings, skipped/duplicates, and
+   Download JSON / Copy JSON buttons (client-side blob/clipboard — no extra
+   endpoint). Fetches automatically on mount (unlike the Notion connection
+   checks, this makes zero external calls, so there's no "don't hammer
+   Notion" reason to gate it behind a button) with a manual "Re-run".
+4. **`docs/notion-migration-plan.md`** — new "Phase 5 — dry-run preview"
+   section with an explicit approval checklist (review every hours row,
+   every project assignment, approve totals, confirm duplicate protection,
+   explicit approval before any write-mode code is even written).
+
+### Proposed client
+
+**Anytime Fuel Pros** — $30.00/hr, **America/Chicago** (stated explicitly on
+the Hours Worked page; differs from the app's generic default of
+`America/New_York` used in mock seed data — flagged as a warning, not
+silently overridden), status `active`.
+
+### Proposed projects (3, derived — not the user's candidate list assumed blindly)
+
+Derived by keyword-matching each session's workstream text and each work
+log's body against the three candidates the user suggested; all three were
+actually evidenced in the source content, so all three are proposed:
+
+- **BOL Review Process V2** — matched by the July 9 session text and
+  extensively evidenced in both day logs' narrative.
+- **AFP Command Center / Sales & Operations Hub** — matched by "Command
+  Center" in the July 9 session text and the day log's "Created a ... Notion
+  page ... for the Command Center plan."
+- **Power Automate Documentation** — matched by the July 8 2:05–5:00 PM
+  session text ("technical documentation and Power Automate support") and
+  the "Power Automate Flow Map" page creation mentioned in the July 9 log.
+
+Two sessions (July 8, 11 AM–1 PM "AFP work"; July 8, 5:10–5:49 PM "website
+and operations planning") matched **none** of the three and were left
+**unassigned** rather than guessed — flagged as warnings. The July 9 session
+matched **two** projects at once (BOL Review Process V2 *and* Command
+Center) — flagged as an ambiguous multi-project session; its primary pick
+(BOL Review Process V2) is a best-effort default, not a confident
+assignment, and the July 9 work log's own project was left unassigned as a
+result (its only session is itself ambiguous).
+
+### Proposed hours (5 rows — every historical billable *and* non-billable session)
+
+| Date | Start–End | Billable | Hours (app / exact) | Amount (app / exact) | Project |
+|---|---|---|---|---|---|
+| 2026-07-08 | 09:00–11:00 | No | 2.00 / 2.0000 | $0.00 | — (onsite, non-billable) |
+| 2026-07-08 | 11:00–13:00 | Yes | 2.00 / 2.0000 | $60.00 / $60.00 | unassigned |
+| 2026-07-08 | 14:05–17:00 | Yes | 2.92 / 2.9167 | $87.60 / $87.50 | Power Automate Documentation |
+| 2026-07-08 | 17:10–17:49 | Yes | 0.65 / 0.6500 | $19.50 / $19.50 | unassigned |
+| 2026-07-09 | 09:12–14:00 | Yes | 4.80 / 4.8000 | $144.00 / $144.00 | BOL Review Process V2 (ambiguous) |
+
+### Proposed work logs (2 — July 8, July 9)
+
+Both `status: done`, `priority: medium` (not stated in source, defaulted —
+flagged). July 8 → Power Automate Documentation (its only identified
+project); July 9 → unassigned (its one session is multi-project).
+July 9's `invoiceDescription` concatenates **three** separate "Invoice-
+Ready" blocks found on that page (main, midday add-on, end-of-day) —
+flagged, since the page itself never states which is canonical.
+
+### Recalculated totals — the source's "10.37 hours / $311.00" was *not* assumed, it was recalculated
+
+- **Billable hours:** 10.37 (app-convention, matches source) / **10.3667**
+  exact (unrounded) — both round to the source-stated 10.37.
+- **Non-billable hours:** 2.00 (the July 8 9–11 AM onsite block).
+- **Invoice amount — a real, reportable rounding discrepancy found:**
+  - **Exact-minute total: $311.00** — matches the source page's own stated
+    total exactly.
+  - **App-convention total (using this app's existing
+    `computeTotalHours`→`computeAmount` pipeline, which rounds elapsed time
+    to hundredths of an hour *before* multiplying by rate): $311.10** — ten
+    cents higher.
+  - **Root cause, isolated to one row:** the July 8 2:05–5:00 PM session is
+    175 minutes = 2.91666...7h exactly (→ $87.50 at $30/hr), but
+    `computeTotalHours` rounds that to 2.92h *before* the rate multiply →
+    2.92 × $30 = $87.60. Every other session's minutes happen to land on a
+    clean hundredth of an hour, so this is the only row affected — but it's
+    enough to move the reconciled total by $0.10. If this data were entered
+    through the app's normal Hours flow as-is, it would store $311.10, not
+    the $311.00 the Notion page currently shows. Surfaced explicitly in the
+    UI's "Discrepancies found" callout and in `totals.discrepancies`, not
+    silently resolved either way — the user needs to decide which
+    convention a real migration should use.
+- **Per-day:** July 8 → 5.57h / $167.00 (both conventions agree — the
+  affected row's $0.10 gap doesn't change the 2-decimal display for that
+  day in isolation, only the running total); July 9 → 4.80h / $144.00. Both
+  match the source pages' own stated per-day figures exactly.
+
+### Tests added (55 new, 105/105 total passing)
+
+- `calculations.test.ts` — time calculation, rate calculation, rounding
+  behavior (including the exact $0.10 discrepancy case above,
+  hand-verified), ambiguous/missing-time handling (identical start/end,
+  break exceeding span, midnight wraparound).
+- `project-matcher.test.ts` — project derivation as a generic, fixture-
+  independent function: single match, no match, ambiguous multi-match,
+  priority-order tie-breaking, empty candidate list.
+- `dry-run.test.ts` — historical session parsing, proposed client/projects/
+  hours/work-logs shape, full totals reconciliation against source-stated
+  figures, warning generation, duplicate detection (client/hours/work-log,
+  parameterized against a fake existing-records snapshot — no real DB
+  needed), determinism (`buildMigrationDryRun()` called twice with the same
+  input `toEqual`s), and that `writesPerformed`/`notionWritesPerformed`/
+  `sqliteWritesPerformed` are always `false`.
+- `no-write-path.test.ts` — static source-text scan across every file in
+  `src/lib/notion/migration/` plus the API route, asserting none of them
+  contain `.insert(`, `.update(`, `.delete(`, `.remove(`, `pushEntity`,
+  `pullDatabase`, `syncEntityNow`, `runFullSync`, `pages.create`,
+  `pages.update`, or `dataSources.query`. (Importing `read-existing.ts`
+  directly in a test isn't possible under plain-node vitest — it pulls in
+  `server-only` repository modules, and the `server-only` package throws
+  outside a react-server/webpack context, same reason
+  `schema-requirements.test.ts` avoided it in Phase 3 — so this is a
+  source-scan guardrail rather than a mocked runtime call, deliberately.)
+
+### Final verification suite
+
+- `npm run lint` — pass (0 errors, 0 warnings; one `react/no-unescaped-
+  entities` caught and fixed during this pass).
+- `npm run typecheck` — pass.
+- `npm test` — pass (105/105 — 50 from Phase 4 + 55 new).
+- `npm run build` — pass; `/api/notion/migration-preview` and
+  `/settings/migration-preview` compile alongside the existing 24 routes.
+
+### Browser verification performed
+
+Started a dev server and exercised `/settings/migration-preview` directly:
+source-records cards (4 pages, correct "read Xh ago" timestamps),
+reconciliation card (10.37h / $311.10 app / $311.00 exact / $311.00
+source-stated, "Matches source-stated totals" badge, the discrepancies
+callout with both $0.10 explanations), per-day totals table, proposed
+client/projects/hours/work-logs sections all rendered with the exact
+figures above, warnings list (10 distinct warning codes with correct
+`relatedIds`), "Skipped / duplicates (0)" (correct — nothing has been
+migrated yet, so nothing collides), and the Export card. Clicked **Copy
+JSON** — succeeded (clipboard write, success toast). Verified the new
+"Historical Migration Dry Run" card renders correctly on `/settings` and
+links through. Checked `preview_console_logs` at `error` level and
+`preview_network` for failed requests after every navigation/interaction —
+zero errors, zero failed requests throughout.
+
+### Confirmations
+
+- **No Notion API call was made by this feature.** Grepped
+  `src/lib/notion/migration/` and the new route: no `notion.*` client call
+  anywhere — the source content is a transcribed fixture, not a live fetch.
+  The only Notion reads this whole phase performed were the one-time
+  `notion-search`/`notion-fetch` calls used to transcribe the fixture
+  before writing any code, both explicitly read-only tools.
+- **No SQLite write occurred.** `read-existing.ts` calls only `repo.all()`;
+  statically verified (see `no-write-path.test.ts`) that no
+  `insert`/`update`/`delete`/`remove` call exists anywhere in this feature.
+- **`NOTION_SYNC_ENABLED` was never touched** — remains unset/false exactly
+  as before this phase.
+- **Local mock mode and existing SQLite data are untouched** — the current
+  seeded client is still "AFP" at $65/hr (mock data), not "Anytime Fuel
+  Pros"; nothing in this phase seeds, migrates, or deletes anything.
+- **Nothing was committed.** Awaiting the user's review of the proposed
+  records, the $0.10 rounding-convention discrepancy, and the ambiguous
+  project assignments before this is committed — and, separately, before
+  any write-migration code is even written (see the new Phase 5 approval
+  checklist in `docs/notion-migration-plan.md`).
+
+### Deliberately not built this phase
+
+Per explicit instruction: no write endpoint, no `NOTION_SYNC_ENABLED=true`,
+no actual migration of data into Notion or SQLite. This phase is
+preview-only end to end.
+
+---
+
 ## 2026-07-09 ~22:10 CT — Phase 4: real AFP Notion databases created and mapped (Claude Code)
 
 **AI model:** Claude Sonnet 5 (Claude Code)
