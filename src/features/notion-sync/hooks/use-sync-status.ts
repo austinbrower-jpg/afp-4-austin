@@ -34,6 +34,17 @@ export function useTestNotionConnection() {
 }
 
 /**
+ * Read-only schema mapping check - retrieves each configured database's
+ * schema and compares it to what the app expects. Never queries row data,
+ * never writes. Manual trigger only (not polled) to avoid hammering Notion.
+ */
+export function useVerifyNotionDatabases() {
+  return useMutation({
+    mutationFn: () => notionSyncApi.verifyDatabases(),
+  });
+}
+
+/**
  * Runs sync once on mount (app startup) and then on an interval driven by
  * the configured NOTION_SYNC_INTERVAL_MINUTES (spec: "pull updates every
  * few minutes and on app startup"). Mount this once near the app root.

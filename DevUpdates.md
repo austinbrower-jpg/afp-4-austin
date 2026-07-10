@@ -1,5 +1,175 @@
 # Dev Updates
 
+## 2026-07-09 ~21:30 CT — Phase 3: real Notion database creation and read-only mapping (Claude Code)
+
+**AI model:** Claude Sonnet 5 (Claude Code)
+
+### Summary
+
+Phase 3 per the user's brief: identify the exact six databases the app
+needs, document schemas for all of them, add a fully read-only database
+verification feature, surface it in Settings, write a non-destructive
+migration plan for the user's existing "Hours Worked"/"Work Done" pages, and
+add tests - all without enabling any write synchronization. Not committed
+yet - pending the user's review of the final report.
+
+### Key finding: the existing architecture needed a new gate
+
+Before this phase, "database id is set" was the *only* condition gating
+both push (`syncEntityNow`/`pushEntity`) and pull (`pullDatabase`/
+`runFullSync`) in `src/lib/notion/sync-engine.ts`. That's a problem for this
+phase specifically: verifying a real database's schema requires setting its
+real `NOTION_DATABASE_*` id, but doing so under the old code would have
+silently armed both push-on-edit *and* the automatic startup/interval pull
+- i.e. simply configuring an id for schema-checking purposes would already
+start pulling real Notion rows into local SQLite, which directly conflicts
+with "do not perform the migration yet" and "do not enable write
+synchronization."
+
+Fix: added a new master switch, `NOTION_SYNC_ENABLED` (default `false`/off),
+checked independently in `config.ts` (`NotionConfig.syncEnabled`) and gated
+inside `pushEntity`, `pullDatabase`, and as an early-return in `runFullSync`
+in `sync-engine.ts`. Database ids can now be set purely for schema
+verification (which never checks this flag - see below) without arming any
+real read/write until the user explicitly sets `NOTION_SYNC_ENABLED=true`.
+
+### The exact six databases (derived from code, not guessed)
+
+From `NotionDatabaseMap` in `src/lib/notion/config.ts` and `NOTION_SCHEMA` in
+`src/lib/notion/mappers.ts`: **client, project, hours, worklog, knowledge,
+invoice** - matching `NOTION_DATABASE_CLIENTS/PROJECTS/HOURS/WORKLOGS/
+KNOWLEDGE/INVOICES`. Mapped against the user's existing Notion tree:
+
+| Entity | Env var | Existing Notion page |
+|---|---|---|
+| hours | `NOTION_DATABASE_HOURS` | Hours Worked |
+| worklog | `NOTION_DATABASE_WORKLOGS` | Work Done |
+| invoice | `NOTION_DATABASE_INVOICES` | Invoice Reports |
+| knowledge | `NOTION_DATABASE_KNOWLEDGE` | Work Stuff |
+| client | `NOTION_DATABASE_CLIENTS` | none - needs a new database |
+| project | `NOTION_DATABASE_PROJECTS` | none - needs a new database |
+
+The sixth (previously unlabeled) database is **Clients** - it falls out
+directly from `NotionDatabaseMap` having exactly six keys once
+hours/worklog/invoice/knowledge/project are accounted for; nothing was
+guessed.
+
+### Changes made
+
+1. **`src/lib/notion/schema-requirements.ts`** (new, pure, no `server-only`
+   so it's directly unit-testable) - `NOTION_PROPERTY_REQUIREMENTS` (exact
+   property name + expected Notion type per entity, mirroring the push
+   builders in `mappers.ts`), `NOTION_DATABASE_ENV_VARS` (single source of
+   truth for env var name + label, now also used by
+   `notion-connection-card.tsx` instead of a local duplicate), and pure
+   functions: `validateProperties`, `isSchemaValid`, `invalidProperties`,
+   `detectDatabaseConfiguration`, `isDatabaseReady`, `isMappingReady`.
+2. **`src/lib/notion/verify-databases.ts`** (new, `server-only`) -
+   `verifyNotionDatabases()`: for each configured database, calls
+   `notion.databases.retrieve` then `notion.dataSources.retrieve` (both
+   read-only GETs returning schema metadata) and validates the result
+   against the pure requirements above. Never calls `dataSources.query`
+   (which would read row content) and never calls any create/update/
+   archive/delete endpoint.
+3. **`GET /api/notion/verify-databases`** - thin route wrapper, read-only.
+4. **Settings UI** - new `NotionMappingCard`
+   (`src/features/settings/components/notion-mapping-card.tsx`) showing,
+   per database: database name, configured/not, accessible/not, schema
+   valid/not, the specific missing-or-wrong-type properties, and an overall
+   "Read-only mapping ready" badge. Manual "Verify databases" trigger (not
+   polled, to avoid hammering Notion). `NotionConnectionCard` gained a
+   "Sync enabled"/"Sync disabled (read-only)" badge and now surfaces the
+   last sync log's message text directly (previously only the timestamp was
+   shown, so "sync is disabled" feedback was invisible).
+5. **`.env.example`** - added `NOTION_SYNC_ENABLED=false` with an
+   explanation of what it does and doesn't gate; the six `NOTION_DATABASE_*`
+   vars were already present from Phase 2.
+6. **`docs/notion-migration-plan.md`** (new) - maps the user's existing
+   Notion tree to entities, spells out exactly what pull/push do and don't
+   touch, flags the "Work Stuff" ambiguity (may be a plain page, not a
+   database - the verify tool will reveal this rather than guessing), warns
+   about not editing old fictional seed rows once sync is ever enabled (that
+   would create new pages in the real workspace via `pages.create`), and
+   ends with an explicit approval checklist. **No migration was performed.**
+7. **`docs/notion-setup.md`** - updated to reference the new
+   `NOTION_SYNC_ENABLED` gate and the "Verify databases" check; added a
+   safety-note line stating there is no delete/archive/move call anywhere
+   in `src/lib/notion/` (confirmed by grep before writing that claim).
+8. **Tests** - `src/lib/notion/schema-requirements.test.ts`, 23 cases:
+   requirement-set shape (exactly the six entity types, exactly one title
+   property each), `validateProperties` (ok / missing / wrong-type / null-
+   or-empty actual-properties / extra unrelated columns ignored),
+   `isSchemaValid`/`invalidProperties`, `detectDatabaseConfiguration`
+   (api-key-only / database-id-missing / neither), `isDatabaseReady` and
+   `isMappingReady` (including the "empty database list is never ready"
+   edge case). All pure - no network, no `server-only` imports, so they run
+   directly under `vitest`.
+
+### What remains mock/local
+
+- No real `NOTION_DATABASE_*` id is set anywhere (`.env.local` still only
+  has `NOTION_API_KEY` from Phase 2). All app data is still 100% local
+  SQLite.
+- `NOTION_SYNC_ENABLED` is unset (defaults to `false`) everywhere.
+- The existing Hours Worked / Work Done / Invoice Reports / Work Stuff
+  Notion pages are completely untouched - nothing in this phase read,
+  wrote, or even connected to them (verified live against the real
+  integration during browser testing below, using a deliberately invalid
+  database id so no real page was touched).
+
+### Whether any Notion write path is active
+
+**No.** `pages.create`/`pages.update` (the only write calls anywhere in
+`src/lib/notion/`) are reachable only through `pushEntity`, which now
+refuses to run unless `NOTION_SYNC_ENABLED=true` - which is not set. Grepped
+the whole `src/lib/notion/` tree for delete/archive/move calls: none exist,
+confirming there is no destructive write path in the codebase at all, active
+or not.
+
+### Browser verification performed
+
+Started a dev server (no stale process conflicts this time) and exercised
+Settings live against the real, valid `NOTION_API_KEY` already in
+`.env.local`:
+
+- Notion Connection card: now shows "Configured" + "Sync disabled
+  (read-only)" badges, and the disabled-sync message text from the last
+  sync log render inline.
+- Notion Database Mapping card renders with "Not checked yet" before the
+  first check.
+- Clicked "Verify databases" with no database ids set: all six reported
+  `configured: false` with a clear per-entity "`NOTION_DATABASE_X` is not
+  set" message; toast read "6/6 database(s) not ready yet." Confirmed the
+  raw JSON response shape via network inspection.
+- Temporarily set `NOTION_DATABASE_HOURS` to a throwaway all-zero id (not a
+  real database) to exercise the "configured but inaccessible" path: got a
+  real Notion API error surfaced cleanly - "Could not find database with
+  ID: ...  Make sure the relevant pages and databases are shared with your
+  integration \"AFP Contractor Workspace\"" - confirming the integration
+  itself is live and named, with no crash and no properties-list noise
+  (fixed the card to only show the missing-properties list once a database
+  is actually reachable, not for the "not configured" or "inaccessible"
+  cases, after the first pass looked noisy for those). Removed the
+  throwaway value immediately after and restored `.env.local` to its exact
+  prior (Phase 2) contents.
+- Zero console errors at any point (checked via `preview_console_logs` at
+  `error` level after every interaction).
+
+### Final verification suite
+
+- `npm run lint` - pass (0 errors, 0 warnings).
+- `npm run typecheck` - pass.
+- `npm test` - pass (50/50 - 27 from Phase 2 + 23 new).
+- `npm run build` - pass; `/api/notion/verify-databases` compiles alongside
+  the existing 22 routes.
+
+### Not committed
+
+Per the user's explicit instruction, nothing from this phase has been
+committed or pushed. Awaiting review of the final report before committing.
+
+---
+
 ## 2026-07-09 ~20:50 CT — Phase 2 browser verification (Claude Code)
 
 **AI model:** Claude Sonnet 5 (Claude Code)

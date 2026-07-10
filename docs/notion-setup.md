@@ -10,6 +10,13 @@ databases, and the app stays fully usable on local data for anything not yet
 connected. Nothing here pushes the local mock/seed data into Notion — see
 [Safety notes](#safety-notes) below.
 
+Setting a database id does **not** by itself enable real sync. It only
+enables the read-only schema check described in [step 6](#6-verify-the-connection-and-database-schema).
+Real push/pull additionally requires `NOTION_SYNC_ENABLED=true` - see
+[`docs/notion-migration-plan.md`](notion-migration-plan.md) if you're
+connecting existing Notion pages that already have content you need to
+preserve.
+
 ## 1. Create an internal integration
 
 1. Go to [notion.so/my-integrations](https://www.notion.so/my-integrations).
@@ -132,36 +139,55 @@ NOTION_DATABASE_WORKLOGS=
 NOTION_DATABASE_KNOWLEDGE=
 NOTION_DATABASE_INVOICES=
 NOTION_SYNC_INTERVAL_MINUTES=5
+NOTION_SYNC_ENABLED=false
 ```
 
 The app reads `NOTION_API_KEY` — not `NOTION_TOKEN` or any other name.
 Restart `npm run dev` after editing `.env.local`.
 
-You only need to set the database ids for the entities you're ready to sync;
-any subset works, and sync is disabled per-entity when its id is missing
-(`isNotionConfigured()` / `databaseIdFor()` in `src/lib/notion/config.ts`).
+You only need to set the database ids for the entities you're ready to check;
+any subset works. Leave `NOTION_SYNC_ENABLED` as `false` (or unset) until
+you've reviewed [`docs/notion-migration-plan.md`](notion-migration-plan.md) -
+it gates all real push/pull, independently of which database ids are set.
 
-## 6. Verify the connection
+## 6. Verify the connection and database schema
 
-Open **Settings** in the app and use the **Test connection** button on the
-Notion Connection card (or `GET /api/notion/test-connection`). This calls
-Notion's read-only `users.me` endpoint to confirm `NOTION_API_KEY` is valid —
-it does not query or write to any database, so it's safe to run before any
-database id is set. Once you're ready to exchange real data, use **Sync
-now**, which does read/write the configured databases.
+Two separate, both read-only, checks:
+
+- **Test connection** (Notion Connection card, or `GET
+  /api/notion/test-connection`): calls Notion's read-only `users.me`
+  endpoint to confirm `NOTION_API_KEY` is valid. Doesn't touch any database,
+  safe before any database id is set.
+- **Verify databases** (Notion Database Mapping card, or `GET
+  /api/notion/verify-databases`): for each configured `NOTION_DATABASE_*`
+  id, calls `databases.retrieve` + `dataSources.retrieve` (both read-only
+  GETs) to confirm the integration can reach it and that its columns match
+  what the app expects, reporting exactly which properties are missing or
+  the wrong type. Never reads row data, never writes. Use this to validate
+  schema before ever setting `NOTION_SYNC_ENABLED=true`.
+
+Once you're ready to exchange real data (push local edits, pull existing
+rows), read `docs/notion-migration-plan.md` and then set
+`NOTION_SYNC_ENABLED=true`. Only then does **Sync now** actually read/write
+the configured databases.
 
 ## Safety notes
 
-- **Setting `NOTION_API_KEY` alone does not push anything.** Every push/pull
-  in `src/lib/notion/sync-engine.ts` first checks `databaseIdFor(type)` and
-  no-ops per entity type when that entity's database id isn't set.
+- **Setting `NOTION_API_KEY` and a database id alone does not push or pull
+  anything.** `NOTION_SYNC_ENABLED` (default `false`) is a separate master
+  switch checked by `pushEntity`, `pullDatabase`, and `runFullSync` in
+  `src/lib/notion/sync-engine.ts` - database ids being set only enables the
+  read-only `verify-databases` schema check above.
 - **The local mock/seed data is never bulk-pushed.** Pushes only happen when
   a route handler calls `syncEntityNow(...)` after a local create/update —
   there is no "push everything" path. Pre-existing seed rows are pushed only
-  if you edit them again after connecting a database.
+  if you edit them again after connecting a database *and* enabling sync.
 - **Pulls never overwrite an unsynced local edit.** If a record changed
   locally and in Notion since the last sync, `pullDatabase()` records a
   conflict instead of merging — resolve it from Settings ("Keep local" /
   "Keep Notion").
+- **Notion is never deleted, moved, or archived by this app.** There is no
+  delete/archive/move call anywhere in `src/lib/notion/` - only
+  `pages.create`, `pages.update` (push), and read-only retrieve/query calls.
 - Start with one database (e.g. Projects) connected and confirm behavior in
   Settings before connecting the rest.
