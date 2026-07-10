@@ -20,16 +20,8 @@ import {
   useTestNotionConnection,
   useTriggerSync,
 } from "@/features/notion-sync/hooks/use-sync-status";
+import { NOTION_DATABASE_ENV_VARS } from "@/lib/notion/schema-requirements";
 import type { SyncEntityType } from "@/types/domain";
-
-const ENTITY_ENV_VARS: Record<SyncEntityType, { envVar: string; label: string }> = {
-  client: { envVar: "NOTION_DATABASE_CLIENTS", label: "Clients" },
-  project: { envVar: "NOTION_DATABASE_PROJECTS", label: "Projects" },
-  hours: { envVar: "NOTION_DATABASE_HOURS", label: "Hours" },
-  worklog: { envVar: "NOTION_DATABASE_WORKLOGS", label: "Work Logs" },
-  knowledge: { envVar: "NOTION_DATABASE_KNOWLEDGE", label: "Knowledge" },
-  invoice: { envVar: "NOTION_DATABASE_INVOICES", label: "Invoices" },
-};
 
 const ENV_VAR_ORDER = [
   "NOTION_API_KEY",
@@ -40,6 +32,7 @@ const ENV_VAR_ORDER = [
   "NOTION_DATABASE_KNOWLEDGE",
   "NOTION_DATABASE_INVOICES",
   "NOTION_SYNC_INTERVAL_MINUTES",
+  "NOTION_SYNC_ENABLED",
 ];
 
 export function NotionConnectionCard() {
@@ -95,17 +88,20 @@ export function NotionConnectionCard() {
             ? `Connected · ${status.configuredDatabases.length}/6 databases mapped`
             : "Not connected · running in local-only mode"}
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex gap-1.5">
           <Badge variant={status.configured ? "secondary" : "outline"}>
             {status.configured ? "Configured" : "Not configured"}
+          </Badge>
+          <Badge variant={status.syncEnabled ? "secondary" : "outline"}>
+            {status.syncEnabled ? "Sync enabled" : "Sync disabled (read-only)"}
           </Badge>
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {(Object.keys(ENTITY_ENV_VARS) as SyncEntityType[]).map((type) => {
+          {(Object.keys(NOTION_DATABASE_ENV_VARS) as SyncEntityType[]).map((type) => {
             const connected = configuredSet.has(type);
-            const { envVar, label } = ENTITY_ENV_VARS[type];
+            const { envVar, label } = NOTION_DATABASE_ENV_VARS[type];
             return (
               <div
                 key={type}
@@ -140,6 +136,9 @@ export function NotionConnectionCard() {
                 : "never"}
             </p>
             <p>Sync interval: every {status.syncIntervalMinutes} min</p>
+            {status.lastSync?.message && (
+              <p className="text-xs italic">{status.lastSync.message}</p>
+            )}
           </div>
           <div className="flex gap-2">
             <Button
@@ -185,6 +184,17 @@ export function NotionConnectionCard() {
                   NOTION_SYNC_INTERVAL_MINUTES
                 </code>{" "}
                 is optional (defaults to 5).
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Setting a database id only enables the read-only schema
+                check below — real push/pull sync stays off until you also
+                set <code className="rounded bg-muted px-1 py-0.5">
+                  NOTION_SYNC_ENABLED=true
+                </code>. See{" "}
+                <code className="rounded bg-muted px-1 py-0.5">
+                  docs/notion-migration-plan.md
+                </code>{" "}
+                before enabling it.
               </p>
             </div>
           </>

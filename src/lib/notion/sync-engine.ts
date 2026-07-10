@@ -189,6 +189,9 @@ export async function pushEntity(
 ): Promise<PushResult> {
   const notion = getNotionClient();
   if (!notion) return { ok: false, error: "Notion is not configured" };
+  if (!getNotionConfig().syncEnabled) {
+    return { ok: false, error: "Notion write sync is disabled (set NOTION_SYNC_ENABLED=true to enable)." };
+  }
 
   const adapter = ADAPTERS[type];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -237,6 +240,14 @@ export interface PullResult {
 export async function pullDatabase(type: SyncableEntityType): Promise<PullResult> {
   const notion = getNotionClient();
   if (!notion) return { ok: false, pulled: 0, conflicts: 0, error: "Notion is not configured" };
+  if (!getNotionConfig().syncEnabled) {
+    return {
+      ok: false,
+      pulled: 0,
+      conflicts: 0,
+      error: "Notion write sync is disabled (set NOTION_SYNC_ENABLED=true to enable).",
+    };
+  }
 
   const adapter = ADAPTERS[type];
   const databaseId = databaseIdFor(type);
@@ -370,6 +381,14 @@ export async function runFullSync(trigger: SyncLogEntry["trigger"]) {
     return { ...log, configured: false };
   }
 
+  if (!getNotionConfig().syncEnabled) {
+    finishSyncLog(log.id, {
+      message:
+        'Notion sync is disabled (NOTION_SYNC_ENABLED is not "true"). Configured database ids are used only for the read-only schema check in Settings - see docs/notion-migration-plan.md before enabling real sync.',
+    });
+    return { ...log, configured: true };
+  }
+
   let entitiesSynced = 0;
   let conflictCount = 0;
   let errorCount = 0;
@@ -425,6 +444,7 @@ export function getSyncStatusSummary() {
 
   return {
     configured,
+    syncEnabled: config.syncEnabled,
     configuredDatabases,
     missingDatabases: (Object.keys(ADAPTERS) as SyncableEntityType[]).filter(
       (t) => !databaseIdFor(t, config),

@@ -14,6 +14,16 @@ export interface NotionConfig {
   apiKey: string | null;
   databases: NotionDatabaseMap;
   syncIntervalMinutes: number;
+  /**
+   * Master switch for row-level sync (push-on-edit + pull-on-startup/
+   * interval/manual). Defaults to false/off - setting NOTION_API_KEY and a
+   * database id only enables the read-only schema mapping check
+   * (src/lib/notion/verify-databases.ts), never push or pull. This has to be
+   * a separate flag from "database id is set" because Phase 3 needs real
+   * database ids configured for schema verification before anyone has
+   * explicitly approved a real sync (see docs/notion-migration-plan.md).
+   */
+  syncEnabled: boolean;
 }
 
 export function getNotionConfig(): NotionConfig {
@@ -28,6 +38,7 @@ export function getNotionConfig(): NotionConfig {
       invoice: process.env.NOTION_DATABASE_INVOICES || null,
     },
     syncIntervalMinutes: Number(process.env.NOTION_SYNC_INTERVAL_MINUTES || 5),
+    syncEnabled: process.env.NOTION_SYNC_ENABLED === "true",
   };
 }
 

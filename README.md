@@ -108,14 +108,15 @@ Copy `.env.example` to `.env.local` and fill in what you have. All Notion variab
 | `NOTION_DATABASE_KNOWLEDGE` | for knowledge sync | Database ID for Work Stuff / knowledge pages |
 | `NOTION_DATABASE_INVOICES` | for invoice sync | Database ID for Invoice Reports |
 | `NOTION_SYNC_INTERVAL_MINUTES` | no (default `5`) | How often background sync runs while the app is open |
+| `NOTION_SYNC_ENABLED` | no (default `false`) | Master switch for real push/pull. Database ids alone only enable the read-only schema check below — this must also be `true` before anything is written to or imported from Notion. |
 
-Each Notion database is expected to have specific column names matching what's pushed/pulled — see the `NOTION_SCHEMA` map in [`src/lib/notion/mappers.ts`](src/lib/notion/mappers.ts) for the exact property names per entity (e.g. the Hours database needs `Date`, `Start Time`, `End Time`, `Break (min)`, `Total Hours`, `Hourly Rate`, `Billable`, `Location`, `Notes`). Either match your existing AFP-Work database columns to that list, or edit the map to match your columns — the two just need to agree. Sync is only enabled per-entity once both `NOTION_API_KEY` and that entity's database ID are set; any subset can be configured independently.
+Each Notion database is expected to have specific column names matching what's pushed/pulled — see the `NOTION_SCHEMA` map in [`src/lib/notion/mappers.ts`](src/lib/notion/mappers.ts) for the exact property names per entity (e.g. the Hours database needs `Date`, `Start Time`, `End Time`, `Break (min)`, `Total Hours`, `Hourly Rate`, `Billable`, `Location`, `Notes`). Either match your existing AFP-Work database columns to that list, or edit the map to match your columns — the two just need to agree. Sync is only enabled per-entity once `NOTION_API_KEY`, that entity's database ID, and `NOTION_SYNC_ENABLED=true` are all set; any subset of databases can be configured independently.
 
 You only need to set the ones you're ready to connect — sync is per-entity and partial configuration is fine.
 
-**Setting up Notion from scratch?** See [`docs/notion-setup.md`](docs/notion-setup.md) for step-by-step instructions on creating the integration and all six databases with the exact property schema each one needs.
+**Setting up Notion from scratch?** See [`docs/notion-setup.md`](docs/notion-setup.md) for step-by-step instructions on creating the integration and all six databases with the exact property schema each one needs. **Connecting existing Notion pages that already have content?** Read [`docs/notion-migration-plan.md`](docs/notion-migration-plan.md) first — it explains exactly what is and isn't touched at each step.
 
-Once `NOTION_API_KEY` is set, use the **Test connection** button on the Notion Connection card in Settings (or `GET /api/notion/test-connection`) to verify the key works. That check only calls Notion's read-only `users.me` endpoint — it never queries or writes to a database, so it's safe to run before any `NOTION_DATABASE_*` id is configured.
+Once `NOTION_API_KEY` is set, use the **Test connection** button on the Notion Connection card in Settings (or `GET /api/notion/test-connection`) to verify the key works. That check only calls Notion's read-only `users.me` endpoint — it never queries or writes to a database, so it's safe to run before any `NOTION_DATABASE_*` id is configured. Once database ids are set, use **Verify databases** on the Notion Database Mapping card (or `GET /api/notion/verify-databases`) to check each one is accessible and its schema matches — also fully read-only, and independent of `NOTION_SYNC_ENABLED`.
 
 ## Desktop app
 

@@ -1,5 +1,6 @@
 import { WorkspaceClientCard } from "@/features/settings/components/workspace-client-card";
 import { NotionConnectionCard } from "@/features/settings/components/notion-connection-card";
+import { NotionMappingCard } from "@/features/settings/components/notion-mapping-card";
 import { ConflictsCard } from "@/features/settings/components/conflicts-card";
 import { DesktopAppCard } from "@/features/settings/components/desktop-app-card";
 
@@ -16,6 +17,7 @@ export default function SettingsPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <WorkspaceClientCard />
         <NotionConnectionCard />
+        <NotionMappingCard />
         <ConflictsCard />
         <DesktopAppCard />
       </div>
