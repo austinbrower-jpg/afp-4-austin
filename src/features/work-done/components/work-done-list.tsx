@@ -24,15 +24,17 @@ import type { Project, WorkLog } from "@/types/domain";
 import { useWorkLogs } from "../hooks/use-work-logs";
 import { PriorityBadge, STATUS_LABEL, STATUS_OPTIONS, StatusBadge } from "./status-priority";
 import { WorkLogFormDialog } from "./work-log-form-dialog";
+import type { AppDataSourceMode } from "@/lib/data/runtime-config";
 
 interface WorkDoneListProps {
   initialWorkLogs: WorkLog[];
   projects: Project[];
+  dataSourceMode: AppDataSourceMode;
 }
 
 const ALL = "__all__";
 
-export function WorkDoneList({ initialWorkLogs, projects }: WorkDoneListProps) {
+export function WorkDoneList({ initialWorkLogs, projects, dataSourceMode }: WorkDoneListProps) {
   const { data: workLogs } = useWorkLogs(undefined, initialWorkLogs);
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
   const [projectFilter, setProjectFilter] = useState<string>(ALL);
@@ -85,7 +87,7 @@ export function WorkDoneList({ initialWorkLogs, projects }: WorkDoneListProps) {
             </SelectContent>
           </Select>
         </div>
-        <WorkLogFormDialog projects={projects} />
+        <WorkLogFormDialog projects={projects} dataSourceMode={dataSourceMode} />
       </div>
 
       <Card className="py-0">

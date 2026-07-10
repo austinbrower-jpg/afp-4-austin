@@ -1,4 +1,3 @@
-import "server-only";
 import type {
   Client,
   HoursEntry,
@@ -44,6 +43,7 @@ export const NOTION_SCHEMA = {
     location: "Location",
     project: "Project",
     notes: "Notes",
+    migrationKey: "Migration Key",
   },
   worklog: {
     title: "Title",
@@ -54,12 +54,23 @@ export const NOTION_SCHEMA = {
     summary: "Summary",
     invoiceDescription: "Invoice Description",
     githubLink: "GitHub Link",
+    clientVisible: "Client Visible",
+    includeInInvoice: "Include in Invoice",
+    includeInWorkReport: "Include in Work Report",
+    detailedWorkDescription: "Detailed Work Description",
+    internalNotes: "Internal Notes",
+    evidenceLinks: "Evidence Links",
+    relatedHours: "Related Hours",
   },
   knowledge: {
     title: "Title",
     type: "Type",
     tags: "Tags",
     project: "Project",
+    clientVisible: "Client Visible",
+    includeInWorkReport: "Include in Work Report",
+    reportSummary: "Report Summary",
+    sourcePage: "Source Page",
   },
   invoice: {
     title: "Invoice Number",
@@ -91,6 +102,7 @@ const number = (n: number) => ({ number: n });
 const checkbox = (b: boolean) => ({ checkbox: b });
 const date = (isoDate: string) => ({ date: { start: isoDate } });
 const url = (href: string | null) => ({ url: href });
+const relation = (pageIds: string[]) => ({ relation: pageIds.map((id) => ({ id })) });
 
 export function clientToNotionProperties(c: Client) {
   const s = NOTION_SCHEMA.client;
@@ -128,6 +140,8 @@ export function hoursToNotionProperties(h: HoursEntry) {
     [s.billable]: checkbox(h.billable),
     [s.location]: richText(h.location),
     [s.notes]: richText(h.notes),
+    ...(h.projectId ? { [s.project]: relation([h.projectId]) } : {}),
+    ...(h.externalId ? { [s.migrationKey]: richText(h.externalId) } : {}),
   };
 }
 
@@ -141,6 +155,14 @@ export function worklogToNotionProperties(w: WorkLog) {
     [s.summary]: richText(w.summary),
     [s.invoiceDescription]: richText(w.invoiceDescription),
     ...(w.githubLink ? { [s.githubLink]: url(w.githubLink) } : {}),
+    ...(w.projectId ? { [s.project]: relation([w.projectId]) } : {}),
+    [s.clientVisible]: checkbox(w.clientVisible === true),
+    [s.includeInInvoice]: checkbox(w.includeInInvoice === true),
+    [s.includeInWorkReport]: checkbox(w.includeInWorkReport === true),
+    [s.detailedWorkDescription]: richText(w.detailedWorkDescription ?? w.invoiceDescription),
+    [s.internalNotes]: richText(w.internalNotes ?? w.detailedNotes),
+    [s.evidenceLinks]: richText((w.evidenceLinks ?? w.evidence).join("\n")),
+    ...((w.relatedHoursIds?.length ?? 0) > 0 ? { [s.relatedHours]: relation(w.relatedHoursIds) } : {}),
   };
 }
 
@@ -150,6 +172,11 @@ export function knowledgeToNotionProperties(k: KnowledgePage) {
     [s.title]: title(k.title),
     [s.type]: select(k.type),
     [s.tags]: multiSelect(k.tags),
+    ...(k.projectId ? { [s.project]: relation([k.projectId]) } : {}),
+    [s.clientVisible]: checkbox(k.clientVisible === true),
+    [s.includeInWorkReport]: checkbox(k.includeInWorkReport === true),
+    [s.reportSummary]: richText(k.reportSummary ?? ""),
+    ...(k.sourcePage ? { [s.sourcePage]: url(k.sourcePage) } : {}),
   };
 }
 
@@ -233,6 +260,7 @@ export function clientFromNotionProperties(
     name: extractPlainText(props[s.title]),
     status: (extractSelect(props[s.status]) as Client["status"]) ?? "active",
     defaultHourlyRate: extractNumber(props[s.defaultHourlyRate]),
+    color: extractPlainText(props[s.color]) || "#6366f1",
     timezone: extractPlainText(props[s.timezone]) || "America/New_York",
     notes: extractPlainText(props[s.notes]),
   };
@@ -248,6 +276,7 @@ export function projectFromNotionProperties(
     priority: (extractSelect(props[s.priority]) as Project["priority"]) ?? "medium",
     description: extractPlainText(props[s.description]),
     tags: extractMultiSelect(props[s.tags]),
+    color: extractPlainText(props[s.color]) || "#6366f1",
   };
 }
 
@@ -280,6 +309,14 @@ export function worklogFromNotionProperties(
     summary: extractPlainText(props[s.summary]),
     invoiceDescription: extractPlainText(props[s.invoiceDescription]),
     githubLink: extractUrl(props[s.githubLink]),
+    projectId: extractRelationIds(props[s.project])[0] ?? null,
+    clientVisible: extractCheckbox(props[s.clientVisible]),
+    includeInInvoice: extractCheckbox(props[s.includeInInvoice]),
+    includeInWorkReport: extractCheckbox(props[s.includeInWorkReport]),
+    detailedWorkDescription: extractPlainText(props[s.detailedWorkDescription]),
+    internalNotes: extractPlainText(props[s.internalNotes]),
+    evidenceLinks: extractPlainText(props[s.evidenceLinks]).split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
+    relatedHoursIds: extractRelationIds(props[s.relatedHours]),
   };
 }
 
@@ -291,6 +328,11 @@ export function knowledgeFromNotionProperties(
     title: extractPlainText(props[s.title]),
     type: (extractSelect(props[s.type]) as KnowledgePage["type"]) ?? "notes",
     tags: extractMultiSelect(props[s.tags]),
+    projectId: extractRelationIds(props[s.project])[0] ?? null,
+    clientVisible: extractCheckbox(props[s.clientVisible]),
+    includeInWorkReport: extractCheckbox(props[s.includeInWorkReport]),
+    reportSummary: extractPlainText(props[s.reportSummary]),
+    sourcePage: extractUrl(props[s.sourcePage]),
   };
 }
 

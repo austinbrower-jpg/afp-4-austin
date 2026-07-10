@@ -1,98 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb, knowledgeRepo, workspaceRepo, clientRepo, newId, nowISO, newSyncable } from "@/lib/db";
-import { syncEntityNow } from "@/lib/notion/sync-engine";
+import { getDataProvider } from "@/lib/data/provider";
+import { newEntityBase } from "@/lib/data/entities";
+import { dataErrorResponse, NO_STORE_HEADERS } from "@/lib/data/route-utils";
 import type { KnowledgePage, KnowledgeType } from "@/types/domain";
 
-const VALID_TYPES: KnowledgeType[] = [
-  "project-note",
-  "documentation",
-  "notes",
-  "flow-map",
-  "research",
-  "meeting-notes",
-  "idea",
-  "sop",
-  "reference",
-];
-
-function isKnowledgeType(value: unknown): value is KnowledgeType {
-  return typeof value === "string" && VALID_TYPES.includes(value as KnowledgeType);
-}
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+const TYPES: KnowledgeType[] = ["project-note", "documentation", "notes", "flow-map", "research", "meeting-notes", "idea", "sop", "reference"];
+const isType = (value: unknown): value is KnowledgeType => typeof value === "string" && TYPES.includes(value as KnowledgeType);
 
 export async function GET(request: NextRequest) {
-  initDb();
-  const sp = request.nextUrl.searchParams;
-  const type = sp.get("type");
-  const parentId = sp.get("parentId");
-  const q = sp.get("q")?.trim().toLowerCase() ?? "";
-
-  let pages = knowledgeRepo.all("title ASC");
-
-  if (type && isKnowledgeType(type)) {
-    pages = pages.filter((p) => p.type === type);
-  }
-
-  if (parentId !== null) {
-    if (parentId === "root" || parentId === "" || parentId === "null") {
-      pages = pages.filter((p) => p.parentId === null);
-    } else {
-      pages = pages.filter((p) => p.parentId === parentId);
-    }
-  }
-
-  if (q) {
-    pages = pages.filter(
-      (p) =>
-        p.title.toLowerCase().includes(q) ||
-        p.content.toLowerCase().includes(q) ||
-        p.tags.some((t) => t.toLowerCase().includes(q)),
-    );
-  }
-
-  return NextResponse.json<KnowledgePage[]>(pages);
+  try {
+    const provider = await getDataProvider();
+    const params = request.nextUrl.searchParams;
+    const type = params.get("type");
+    const parentId = params.get("parentId");
+    const query = params.get("q")?.trim().toLowerCase() ?? "";
+    let pages = await provider.knowledge.list();
+    if (type && isType(type)) pages = pages.filter((page) => page.type === type);
+    if (parentId !== null) pages = pages.filter((page) => parentId === "root" || !parentId || parentId === "null" ? page.parentId === null : page.parentId === parentId);
+    if (query) pages = pages.filter((page) => [page.title, page.content, ...page.tags].some((value) => value.toLowerCase().includes(query)));
+    return NextResponse.json(pages, { headers: NO_STORE_HEADERS });
+  } catch (error) { return dataErrorResponse(error); }
 }
-
 export async function POST(request: NextRequest) {
-  initDb();
-  const body = await request.json().catch(() => null);
-
-  if (!body || typeof body.title !== "string" || !body.title.trim()) {
-    return NextResponse.json({ error: "Title is required" }, { status: 400 });
-  }
-  if (!isKnowledgeType(body.type)) {
-    return NextResponse.json({ error: "A valid knowledge type is required" }, { status: 400 });
-  }
-  if (body.parentId) {
-    const parent = knowledgeRepo.findById(body.parentId);
-    if (!parent) {
-      return NextResponse.json({ error: "Parent page not found" }, { status: 400 });
+  try {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body.title !== "string" || !body.title.trim() || !isType(body.type)) {
+      return NextResponse.json({ error: "Title and a valid knowledge type are required." }, { status: 400 });
     }
-  }
-
-  const workspace = workspaceRepo.all()[0];
-  const client = clientRepo.all()[0];
-  const now = nowISO();
-
-  const page: KnowledgePage = {
-    id: newId("kb"),
-    workspaceId: workspace?.id ?? "",
-    clientId: typeof body.clientId === "string" ? body.clientId : (client?.id ?? null),
-    projectId: typeof body.projectId === "string" ? body.projectId : null,
-    type: body.type,
-    title: body.title.trim(),
-    content: typeof body.content === "string" ? body.content : "",
-    tags: Array.isArray(body.tags) ? body.tags.filter((t: unknown) => typeof t === "string") : [],
-    parentId: typeof body.parentId === "string" ? body.parentId : null,
-    backlinkIds: Array.isArray(body.backlinkIds)
-      ? body.backlinkIds.filter((id: unknown) => typeof id === "string")
-      : [],
-    ...newSyncable(),
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  knowledgeRepo.insert(page);
-  await syncEntityNow("knowledge", page.id);
-
-  return NextResponse.json<KnowledgePage>(page, { status: 201 });
+    const provider = await getDataProvider();
+    const [workspace, client] = await Promise.all([provider.workspace(), provider.clients.list().then((rows) => rows[0])]);
+    const page: KnowledgePage = {
+      ...newEntityBase("knowledge"),
+      workspaceId: workspace?.id ?? "",
+      clientId: typeof body.clientId === "string" ? body.clientId : client?.id ?? null,
+      projectId: typeof body.projectId === "string" ? body.projectId : null,
+      type: body.type,
+      title: body.title.trim(),
+      content: typeof body.content === "string" ? body.content : "",
+      tags: Array.isArray(body.tags) ? body.tags.filter((tag: unknown): tag is string => typeof tag === "string") : [],
+      parentId: typeof body.parentId === "string" ? body.parentId : null,
+      backlinkIds: Array.isArray(body.backlinkIds) ? body.backlinkIds.filter((id: unknown): id is string => typeof id === "string") : [],
+    };
+    const saved = await provider.knowledge.create(page);
+    return NextResponse.json(saved.entity, { status: 201 });
+  } catch (error) { return dataErrorResponse(error); }
 }

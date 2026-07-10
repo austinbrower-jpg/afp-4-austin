@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,6 +51,7 @@ import {
   PriorityBadge,
   StatusBadge,
 } from "./status-priority";
+import type { AppDataSourceMode } from "@/lib/data/runtime-config";
 
 const NO_PROJECT = "__none__";
 
@@ -58,9 +60,10 @@ interface WorkLogDetailProps {
   projects: Project[];
   hours: HoursEntry[];
   knowledge: KnowledgePage[];
+  dataSourceMode: AppDataSourceMode;
 }
 
-export function WorkLogDetail({ workLog, projects, hours, knowledge }: WorkLogDetailProps) {
+export function WorkLogDetail({ workLog, projects, hours, knowledge, dataSourceMode }: WorkLogDetailProps) {
   const router = useRouter();
   const { mutate: updateWorkLog, isPending: isSaving } = useUpdateWorkLog(workLog.id);
   const { mutate: deleteWorkLog, isPending: isDeleting } = useDeleteWorkLog();
@@ -73,6 +76,11 @@ export function WorkLogDetail({ workLog, projects, hours, knowledge }: WorkLogDe
   const [summary, setSummary] = useState(workLog.summary);
   const [detailedNotes, setDetailedNotes] = useState(workLog.detailedNotes);
   const [invoiceDescription, setInvoiceDescription] = useState(workLog.invoiceDescription);
+  const [detailedWorkDescription, setDetailedWorkDescription] = useState(workLog.detailedWorkDescription ?? workLog.invoiceDescription);
+  const [internalNotes, setInternalNotes] = useState(workLog.internalNotes ?? workLog.detailedNotes);
+  const [clientVisible, setClientVisible] = useState(workLog.clientVisible === true);
+  const [includeInInvoice, setIncludeInInvoice] = useState(workLog.includeInInvoice === true);
+  const [includeInWorkReport, setIncludeInWorkReport] = useState(workLog.includeInWorkReport === true);
   const [relatedHoursIds, setRelatedHoursIds] = useState<string[]>(workLog.relatedHoursIds);
   const [relatedKnowledgeIds, setRelatedKnowledgeIds] = useState<string[]>(
     workLog.relatedKnowledgeIds,
@@ -111,9 +119,15 @@ export function WorkLogDetail({ workLog, projects, hours, knowledge }: WorkLogDe
         evidence,
         githubLink: githubLink.trim() ? githubLink.trim() : null,
         attachments,
+        detailedWorkDescription,
+        internalNotes,
+        clientVisible,
+        includeInInvoice,
+        includeInWorkReport,
+        evidenceLinks: evidence,
       },
       {
-        onSuccess: () => toast.success("Work log saved"),
+        onSuccess: () => toast.success(dataSourceMode === "notion" ? "Saved to Notion" : "Work log saved"),
         onError: () => toast.error("Failed to save work log"),
       },
     );
@@ -137,6 +151,7 @@ export function WorkLogDetail({ workLog, projects, hours, knowledge }: WorkLogDe
           Back to Work Done
         </Button>
         <div className="flex items-center gap-2">
+          {workLog.notionUrl && <Button variant="outline" size="sm" nativeButton={false} render={<a href={workLog.notionUrl} target="_blank" rel="noreferrer" />}><ExternalLink className="size-3.5" />Open in Notion</Button>}
           <StatusBadge status={workLog.status} />
           <PriorityBadge priority={workLog.priority} />
         </div>
@@ -292,6 +307,26 @@ export function WorkLogDetail({ workLog, projects, hours, knowledge }: WorkLogDe
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
+          <CardHeader><CardTitle>Detailed Work Description</CardTitle><CardDescription>Client-safe detail for the work report.</CardDescription></CardHeader>
+          <CardContent><Textarea value={detailedWorkDescription} onChange={(event) => setDetailedWorkDescription(event.target.value)} className="min-h-40" /></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Internal Notes</CardTitle><CardDescription>Private notes that never enter client-facing exports.</CardDescription></CardHeader>
+          <CardContent><Textarea value={internalNotes} onChange={(event) => setInternalNotes(event.target.value)} className="min-h-40" /></CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader><CardTitle>Client Visibility</CardTitle><CardDescription>Explicit opt-in is required before this record can enter an invoice or work report.</CardDescription></CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3">
+          <label className="flex items-center gap-2 text-sm"><Checkbox checked={clientVisible} onCheckedChange={(checked) => { const visible = checked === true; setClientVisible(visible); if (!visible) { setIncludeInInvoice(false); setIncludeInWorkReport(false); } }} />Client Visible</label>
+          <label className="flex items-center gap-2 text-sm"><Checkbox checked={includeInInvoice} disabled={!clientVisible} onCheckedChange={(checked) => setIncludeInInvoice(checked === true)} />Include in Invoice</label>
+          <label className="flex items-center gap-2 text-sm"><Checkbox checked={includeInWorkReport} disabled={!clientVisible} onCheckedChange={(checked) => setIncludeInWorkReport(checked === true)} />Include in Work Report</label>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
           <CardHeader>
             <CardTitle>Related Hours</CardTitle>
             <CardDescription>Link the hours entries this work log accounts for.</CardDescription>
@@ -347,7 +382,7 @@ export function WorkLogDetail({ workLog, projects, hours, knowledge }: WorkLogDe
       </div>
 
       <div className="sticky bottom-0 -mx-6 mt-2 flex items-center justify-between gap-3 border-t border-border bg-background/95 px-6 py-3 backdrop-blur supports-backdrop-filter:bg-background/80">
-        <AlertDialog>
+        {dataSourceMode === "mock" && <AlertDialog>
           <AlertDialogTrigger render={<Button type="button" variant="destructive" />}>
             <Trash2 className="size-4" />
             Delete
@@ -370,11 +405,11 @@ export function WorkLogDetail({ workLog, projects, hours, knowledge }: WorkLogDe
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>}
 
         <Button type="button" onClick={handleSave} disabled={isSaving}>
           <Save className="size-4" />
-          {isSaving ? "Saving…" : "Save changes"}
+          {isSaving ? "Saving…" : dataSourceMode === "notion" ? "Save to Notion" : "Save changes"}
         </Button>
       </div>
     </div>

@@ -6,6 +6,8 @@ export interface TimerStopResult {
   date: string;
   startTime: string;
   endTime: string;
+  startedAtIso: string;
+  endedAtIso: string;
 }
 
 interface TimerState {
@@ -14,6 +16,7 @@ interface TimerState {
   startedAtIso: string | null;
   startDate: string | null;
   startTime: string | null;
+  stoppedDraft: TimerStopResult | null;
   start: () => void;
   /** Captures endTime = now and returns the shift to persist; does not reset. */
   stop: () => TimerStopResult | null;
@@ -33,6 +36,7 @@ export const useHoursTimerStore = create<TimerState>()(
       startedAtIso: null,
       startDate: null,
       startTime: null,
+      stoppedDraft: null,
       start: () => {
         set({
           isRunning: true,
@@ -42,11 +46,13 @@ export const useHoursTimerStore = create<TimerState>()(
         });
       },
       stop: () => {
-        const { isRunning, startDate, startTime } = get();
-        if (!isRunning || !startDate || !startTime) return null;
-        return { date: startDate, startTime, endTime: nowTimeHHMM() };
+        const { isRunning, startDate, startTime, startedAtIso } = get();
+        if (!isRunning || !startDate || !startTime || !startedAtIso) return null;
+        const capture = { date: startDate, startTime, endTime: nowTimeHHMM(), startedAtIso, endedAtIso: new Date().toISOString() };
+        set({ isRunning: false, stoppedDraft: capture });
+        return capture;
       },
-      reset: () => set({ isRunning: false, startedAtIso: null, startDate: null, startTime: null }),
+      reset: () => set({ isRunning: false, startedAtIso: null, startDate: null, startTime: null, stoppedDraft: null }),
     }),
     { name: "afp-hours-timer" },
   ),

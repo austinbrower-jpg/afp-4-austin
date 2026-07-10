@@ -21,6 +21,8 @@ export type SyncStatus =
 export interface Syncable {
   notionPageId: string | null;
   notionDatabaseId: string | null;
+  /** Direct page link returned by Notion-native repositories. */
+  notionUrl?: string | null;
   syncStatus: SyncStatus;
   lastSyncedAt: string | null;
   notionLastEditedTime: string | null;
@@ -30,6 +32,8 @@ export interface BaseEntity extends Syncable {
   id: ID;
   createdAt: string;
   updatedAt: string;
+  /** Non-fatal mapping problems surfaced without crashing an entire list. */
+  validationWarnings?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +98,7 @@ export interface HoursEntry extends BaseEntity {
   relatedWorkLogId: ID | null;
   notes: string;
   source: HoursEntrySource;
+  externalId?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +132,12 @@ export interface WorkLog extends BaseEntity {
   evidence: string[]; // free-text evidence notes / links
   githubLink: string | null;
   attachments: Attachment[];
+  detailedWorkDescription?: string;
+  internalNotes?: string;
+  clientVisible?: boolean;
+  includeInInvoice?: boolean;
+  includeInWorkReport?: boolean;
+  evidenceLinks?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +165,10 @@ export interface KnowledgePage extends BaseEntity {
   tags: string[];
   parentId: ID | null; // nested pages
   backlinkIds: ID[]; // pages this page links to
+  clientVisible?: boolean;
+  includeInWorkReport?: boolean;
+  reportSummary?: string;
+  sourcePage?: string | null;
 }
 
 // ---------------------------------------------------------------------------

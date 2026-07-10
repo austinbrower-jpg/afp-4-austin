@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { addDays, format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, Database, Eye, LockKeyhole } from "lucide-react";
-import { apiGet } from "@/lib/api-client/http";
+import { apiGet, apiPost } from "@/lib/api-client/http";
 import { composeReport } from "@/lib/reports/engine";
 import type { ReportBuilderData } from "@/lib/reports/data-source";
 import type {
@@ -27,6 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ReportExportActions } from "./report-export-actions";
 import { ReportPreview } from "./report-preview";
+import type { InvoiceReport } from "@/types/domain";
 
 interface BuilderState extends ReportBuilderInput {
   source: ReportDataSource;
@@ -83,6 +85,9 @@ export function ReportBuilder() {
     queryFn: () => apiGet<ReportSettings>("/api/report-settings"),
   });
   const [state, setState] = useState<BuilderState | null>(null);
+  const [hasExported, setHasExported] = useState(false);
+  const [isSavingMetadata, setIsSavingMetadata] = useState(false);
+  const [savedMetadataUrl, setSavedMetadataUrl] = useState<string | null>(null);
   if (builderQuery.data && settingsQuery.data && state === null) {
     const source = builderQuery.data.recommendedSource;
     const dataset = builderQuery.data.datasets.find((candidate) => candidate.source === source)!;
@@ -112,21 +117,46 @@ export function ReportBuilder() {
   });
 
   const update = <K extends keyof BuilderState>(key: K, value: BuilderState[K]) =>
-    setState({ ...state, [key]: value });
+    { setHasExported(false); setSavedMetadataUrl(null); setState({ ...state, [key]: value }); };
   const changeSource = (source: ReportDataSource) => {
     const next = builderQuery.data!.datasets.find((candidate) => candidate.source === source)!;
     setState({ ...makeInitialState(next, source, settingsQuery.data!), type: state.type });
+    setHasExported(false);
+    setSavedMetadataUrl(null);
   };
-  const changeClient = (clientId: string) => setState({
-    ...state,
-    clientId,
-    projectIds: [],
-    draftDescriptions: {},
-  });
+  const changeClient = (clientId: string) => {
+    setHasExported(false);
+    setSavedMetadataUrl(null);
+    setState({
+      ...state,
+      clientId,
+      projectIds: [],
+      draftDescriptions: {},
+    });
+  };
   const toggleProject = (id: string, checked: boolean) => update(
     "projectIds",
     checked ? [...state.projectIds, id] : state.projectIds.filter((projectId) => projectId !== id),
   );
+  const saveInvoiceMetadata = async () => {
+    if (report.type === "work-log-report" || dataset.source !== "notion" || !hasExported) return;
+    setIsSavingMetadata(true);
+    try {
+      const saved = await apiPost<InvoiceReport & { notionUrl?: string | null }>("/api/invoices", {
+        periodStart: report.invoice.periodStart,
+        periodEnd: report.invoice.periodEnd,
+        invoiceNumber: report.invoice.number,
+        summary: report.summary,
+        previewConfirmed: true,
+      });
+      setSavedMetadataUrl(saved.notionUrl ?? null);
+      toast.success("Invoice metadata saved to Notion");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to save invoice metadata");
+    } finally {
+      setIsSavingMetadata(false);
+    }
+  };
 
   return (
     <div className="grid items-start gap-6 xl:grid-cols-[390px_minmax(0,1fr)]">
@@ -158,11 +188,11 @@ export function ReportBuilder() {
       </aside>
 
       <main className="min-w-0 space-y-5">
-        <div className="flex flex-col justify-between gap-4 rounded-xl border bg-card p-4 sm:flex-row sm:items-center"><div><div className="flex items-center gap-2"><Eye className="size-4" /><h2 className="font-semibold">Live preview</h2><Badge variant="outline">Read-only</Badge></div><p className="mt-1 text-xs text-muted-foreground">Exports use exactly the sanitized view shown below.</p></div><ReportExportActions report={report} /></div>
+        <div className="flex flex-col justify-between gap-4 rounded-xl border bg-card p-4 sm:flex-row sm:items-center"><div><div className="flex items-center gap-2"><Eye className="size-4" /><h2 className="font-semibold">Live preview</h2><Badge variant="outline">Read-only</Badge></div><p className="mt-1 text-xs text-muted-foreground">Exports use exactly the sanitized view shown below.</p></div><ReportExportActions report={report} onExport={() => setHasExported(true)} /></div>
         {report.warnings.length > 0 && <Alert><AlertTriangle /><AlertTitle>Validation warnings</AlertTitle><AlertDescription><ul className="mt-1 list-disc pl-4">{report.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></AlertDescription></Alert>}
         {report.sessions.length === 0 && <div className="rounded-xl border border-dashed p-10 text-center"><h3 className="font-medium">No approved records for this selection</h3><p className="mt-2 text-sm text-muted-foreground">Try another source, period, or project. Records missing explicit visibility approval remain safely excluded.</p></div>}
         <ReportPreview report={report} />
-        <div className="flex flex-col justify-between gap-3 rounded-xl border border-dashed p-4 sm:flex-row sm:items-center"><div><h3 className="text-sm font-medium">Save report metadata to Invoice Reports</h3><p className="text-xs text-muted-foreground">Future gated action. Preview and export do not save report records.</p></div><Button disabled>Not enabled yet</Button></div>
+        <div className="flex flex-col justify-between gap-3 rounded-xl border border-dashed p-4 sm:flex-row sm:items-center"><div><h3 className="text-sm font-medium">Save invoice metadata to Notion</h3><p className="text-xs text-muted-foreground">Available only for a Notion-backed invoice after at least one preview export. No report draft text is written back to source records.</p>{savedMetadataUrl && <a className="text-xs underline" href={savedMetadataUrl} target="_blank" rel="noreferrer">Open saved Notion page</a>}</div><Button disabled={dataset.source !== "notion" || report.type === "work-log-report" || !hasExported || isSavingMetadata} onClick={saveInvoiceMetadata}>{isSavingMetadata ? "Saving…" : dataset.source === "notion" && report.type !== "work-log-report" ? hasExported ? "Save to Notion" : "Export first" : "Not available"}</Button></div>
       </main>
     </div>
   );

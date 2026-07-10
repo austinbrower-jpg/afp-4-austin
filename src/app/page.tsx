@@ -5,7 +5,7 @@ import { StatCardsGrid } from "@/features/dashboard/components/stat-cards";
 import { RecentWorkEntries } from "@/features/dashboard/components/recent-work-entries";
 import { RecentNotes } from "@/features/dashboard/components/recent-notes";
 import { UpcomingTasks } from "@/features/dashboard/components/upcoming-tasks";
-import { SyncStatusCard, RecentSyncCard } from "@/features/dashboard/components/sync-panel";
+import { RuntimeStatusCard } from "@/features/runtime/components/runtime-status-card";
 
 export default function DashboardPage() {
   const { data: summary, isLoading } = useDashboardSummary();
@@ -26,8 +26,7 @@ export default function DashboardPage() {
         <RecentWorkEntries summary={summary} isLoading={isLoading} />
         <RecentNotes summary={summary} isLoading={isLoading} />
         <UpcomingTasks summary={summary} isLoading={isLoading} />
-        <SyncStatusCard />
-        <RecentSyncCard />
+        <RuntimeStatusCard />
       </div>
     </div>
   );

@@ -1,48 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb, reportSettingsRepo } from "@/lib/db";
+import { getAppDataSource } from "@/lib/data/runtime";
+import { dataErrorResponse, NO_STORE_HEADERS } from "@/lib/data/route-utils";
 import { DEFAULT_REPORT_SETTINGS, type ReportSettings } from "@/lib/reports/types";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+function environmentSettings(): ReportSettings {
+  return {
+    ...DEFAULT_REPORT_SETTINGS,
+    contractorName: process.env.REPORT_CONTRACTOR_NAME || DEFAULT_REPORT_SETTINGS.contractorName,
+    businessName: process.env.REPORT_BUSINESS_NAME || "",
+    email: process.env.REPORT_EMAIL || "",
+    phone: process.env.REPORT_PHONE || "",
+    address: process.env.REPORT_ADDRESS || "",
+    defaultHourlyRate: Number(process.env.REPORT_DEFAULT_HOURLY_RATE || DEFAULT_REPORT_SETTINGS.defaultHourlyRate),
+    defaultPaymentTerms: process.env.REPORT_DEFAULT_PAYMENT_TERMS || DEFAULT_REPORT_SETTINGS.defaultPaymentTerms,
+    defaultInvoiceNotes: process.env.REPORT_DEFAULT_INVOICE_NOTES || DEFAULT_REPORT_SETTINGS.defaultInvoiceNotes,
+    logoPath: process.env.REPORT_LOGO_PATH || "",
+    clientDisplayName: process.env.REPORT_CLIENT_DISPLAY_NAME || "",
+    clientBillingContact: process.env.REPORT_CLIENT_BILLING_CONTACT || "",
+    clientBillingEmail: process.env.REPORT_CLIENT_BILLING_EMAIL || "",
+  };
+}
+
 export async function GET() {
-  initDb();
-  return NextResponse.json<ReportSettings>(reportSettingsRepo.get());
+  try {
+    if (getAppDataSource() === "notion") return NextResponse.json(environmentSettings(), { headers: NO_STORE_HEADERS });
+    const { initDb, reportSettingsRepo } = await import("@/lib/db");
+    initDb();
+    return NextResponse.json(reportSettingsRepo.get(), { headers: NO_STORE_HEADERS });
+  } catch (error) { return dataErrorResponse(error); }
 }
 
 export async function PATCH(request: NextRequest) {
-  initDb();
-  const body = await request.json().catch(() => null) as Partial<ReportSettings> | null;
-  if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-
-  const current = reportSettingsRepo.get();
-  const textKeys: Array<Exclude<keyof ReportSettings, "defaultHourlyRate">> = [
-    "contractorName",
-    "businessName",
-    "email",
-    "phone",
-    "address",
-    "defaultPaymentTerms",
-    "defaultInvoiceNotes",
-    "logoPath",
-    "clientDisplayName",
-    "clientBillingContact",
-    "clientBillingEmail",
-  ];
-  const next = { ...current };
-  for (const key of textKeys) {
-    if (body[key] !== undefined) {
-      if (typeof body[key] !== "string") {
-        return NextResponse.json({ error: `${key} must be a string` }, { status: 400 });
-      }
-      next[key] = body[key];
+  try {
+    if (getAppDataSource() === "notion") {
+      return NextResponse.json({ error: "Report settings are environment-managed in Notion production mode." }, { status: 405 });
     }
-  }
-  if (body.defaultHourlyRate !== undefined) {
-    const rate = Number(body.defaultHourlyRate);
-    if (!Number.isFinite(rate) || rate < 0) {
-      return NextResponse.json({ error: "defaultHourlyRate must be non-negative" }, { status: 400 });
+    const { initDb, reportSettingsRepo } = await import("@/lib/db");
+    initDb();
+    const body = await request.json().catch(() => null) as ReportSettings | null;
+    if (!body || !body.contractorName?.trim() || !Number.isFinite(Number(body.defaultHourlyRate)) || Number(body.defaultHourlyRate) < 0) {
+      return NextResponse.json({ error: "Invalid report settings." }, { status: 400 });
     }
-    next.defaultHourlyRate = rate;
-  }
-  if (!next.contractorName.trim()) next.contractorName = DEFAULT_REPORT_SETTINGS.contractorName;
-  return NextResponse.json<ReportSettings>(reportSettingsRepo.save(next));
+    return NextResponse.json(reportSettingsRepo.save({ ...body, defaultHourlyRate: Number(body.defaultHourlyRate) }));
+  } catch (error) { return dataErrorResponse(error); }
 }
 

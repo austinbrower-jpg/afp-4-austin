@@ -1,21 +1,18 @@
-import { initDb, projectRepo, workLogRepo } from "@/lib/db";
+import { connection } from "next/server";
+import { getDataProvider } from "@/lib/data/provider";
 import { WorkDoneList } from "@/features/work-done/components/work-done-list";
 
 export default async function WorkDonePage() {
-  initDb();
-  const workLogs = workLogRepo.all("date DESC");
-  const projects = projectRepo.all("name ASC");
-
+  await connection();
+  const provider = await getDataProvider();
+  const [workLogs, projects] = await Promise.all([provider.workLogs.list(), provider.projects.list()]);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Work Done</h1>
-        <p className="text-muted-foreground">
-          Document completed work — engineering notes and the client-facing
-          invoice description are tracked separately for every entry.
-        </p>
+        <p className="text-muted-foreground">Document internal work and independently controlled client-facing descriptions.</p>
       </div>
-      <WorkDoneList initialWorkLogs={workLogs} projects={projects} />
+      <WorkDoneList initialWorkLogs={workLogs} projects={projects} dataSourceMode={provider.mode} />
     </div>
   );
 }

@@ -34,7 +34,7 @@ function toFormState(client: { name: string; defaultHourlyRate: number; timezone
   };
 }
 
-export function WorkspaceClientCard() {
+export function WorkspaceClientCard({ readOnly = false }: { readOnly?: boolean }) {
   const { data, isLoading } = useSettings();
   const { mutate: updateClient, isPending } = useUpdateClientSettings();
 
@@ -123,6 +123,7 @@ export function WorkspaceClientCard() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               aria-invalid={nameInvalid}
               placeholder="Client name"
+              disabled={readOnly}
             />
           </div>
           <div className="space-y-1.5">
@@ -138,6 +139,7 @@ export function WorkspaceClientCard() {
               }
               aria-invalid={rateInvalid}
               placeholder="65.00"
+              disabled={readOnly}
             />
           </div>
         </div>
@@ -148,6 +150,7 @@ export function WorkspaceClientCard() {
             value={form.timezone}
             onChange={(e) => setForm({ ...form, timezone: e.target.value })}
             placeholder="America/New_York"
+            disabled={readOnly}
           />
           <p className="text-xs text-muted-foreground">
             IANA timezone name, e.g. America/New_York, Europe/London, Asia/Kolkata.
@@ -161,6 +164,7 @@ export function WorkspaceClientCard() {
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
             placeholder="Internal notes about this client…"
             className="min-h-24"
+            disabled={readOnly}
           />
         </div>
         <div className="flex items-center justify-end gap-2 pt-1">
@@ -171,7 +175,7 @@ export function WorkspaceClientCard() {
           )}
           <Button
             onClick={handleSave}
-            disabled={!isDirty || isPending || rateInvalid || nameInvalid}
+            disabled={readOnly || !isDirty || isPending || rateInvalid || nameInvalid}
           >
             {isPending ? "Saving…" : "Save changes"}
           </Button>

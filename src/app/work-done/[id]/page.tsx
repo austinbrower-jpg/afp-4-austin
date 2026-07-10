@@ -1,36 +1,15 @@
+import { connection } from "next/server";
 import { notFound } from "next/navigation";
-import {
-  hoursRepo,
-  initDb,
-  knowledgeRepo,
-  projectRepo,
-  workLogRepo,
-} from "@/lib/db";
+import { getDataProvider } from "@/lib/data/provider";
 import { WorkLogDetail } from "@/features/work-done/components/work-log-detail";
 
-interface WorkLogPageProps {
-  params: Promise<{ id: string }>;
-}
-
-export default async function WorkLogPage({ params }: WorkLogPageProps) {
+export default async function WorkLogPage({ params }: { params: Promise<{ id: string }> }) {
+  await connection();
+  const provider = await getDataProvider();
   const { id } = await params;
-  initDb();
-
-  const workLog = workLogRepo.findById(id);
-  if (!workLog) {
-    notFound();
-  }
-
-  const projects = projectRepo.all("name ASC");
-  const hours = hoursRepo.all("date DESC");
-  const knowledge = knowledgeRepo.all("title ASC");
-
-  return (
-    <WorkLogDetail
-      workLog={workLog}
-      projects={projects}
-      hours={hours}
-      knowledge={knowledge}
-    />
-  );
+  const [workLog, projects, hours, knowledge] = await Promise.all([
+    provider.workLogs.findById(id), provider.projects.list(), provider.hours.list(), provider.knowledge.list(),
+  ]);
+  if (!workLog) notFound();
+  return <WorkLogDetail workLog={workLog} projects={projects} hours={hours} knowledge={knowledge} dataSourceMode={provider.mode} />;
 }

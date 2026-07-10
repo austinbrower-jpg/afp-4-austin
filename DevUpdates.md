@@ -1315,3 +1315,41 @@ Effectively the entire `src/` tree (180+ files) plus `electron/main.js`, `electr
 ### Safety outcome
 
 No Notion write path was called. No source Hours, Work Done, Project, Client, Invoice Report, or Knowledge record was changed. Browser draft verification reloaded the builder and confirmed the original source description returned.
+
+---
+
+## 2026-07-10 — Phase 8: Notion-native production mode and Vercel readiness (Codex)
+
+### Preflight and safety
+
+- Confirmed branch `feat/notion-native-production`, a clean starting worktree, and `HEAD` matching freshly fetched `origin/main` at `930d3ce84b273305dde7abd238ecd16b6d90eb03` before implementation.
+- Kept `NOTION_SYNC_ENABLED=false`. The general sync engine remains unavailable in Notion mode.
+- Did not execute the historical import, apply a Notion schema change, call a real Notion write endpoint, change a source record, commit, or push.
+
+### Implementation
+
+- Added explicit `APP_DATA_SOURCE=mock|notion` runtime selection with fail-closed Vercel validation. Vercel production refuses mock mode, Notion mode refuses SQLite, and invalid/missing production configuration stops startup instead of falling back.
+- Added a typed provider layer for Clients, Projects, Hours Worked, Work Done, Knowledge, and Invoice Reports. The Notion provider performs fresh data-source reads, centralized property mapping, malformed-row warnings, relation mapping, duplicate protection, target-database verification, and dedicated create/update operations without delete/archive/move behavior.
+- Migrated the Dashboard, Hours, Work Done, Projects, Knowledge, Invoice Reports, global search, Settings, and Report Builder production paths to the selected provider. Added source badges, manual refresh, loading/empty/error handling, and no-store/revalidation behavior.
+- Added explicit draft-first Hours and Work Done workflows. Running/stopped timers and unsaved edits remain local; only a dedicated Save to Notion action can write. Invoice-report metadata also requires a confirmed preview/export before its dedicated write.
+- Kept the historical $311.00 report reconciliation as an isolated, explicitly selectable read-only dataset. Notion mode now always opens the Report Builder on the current Notion dataset, including when that live dataset is empty.
+- Added a read-only Notion schema preview/verification endpoint and Settings UI. Proposed additive Work Done and Knowledge fields are reported, but no schema-apply endpoint exists. Related Hours remains deferred and the existing Hours Migration Key is preserved for future import compatibility.
+- Added Basic Auth support plus Vercel deployment-protection attestation, a secret-safe `/api/health` endpoint, a production error boundary, production-boundary tests, and updated environment/deployment/production-mode/report documentation.
+
+### Tests and verification
+
+- `npm run lint` — pass (0 errors, 0 warnings).
+- `npm run typecheck` — pass.
+- `npm test` — pass, 207/207 tests across 17 files.
+- `npm run build` — pass with Next.js 16.2.10; all application and API routes compiled.
+- Local browser verification in Notion mode loaded Dashboard, Hours, Work Done, Projects, Knowledge, Invoice Reports, Reports, and Settings. Live Notion databases currently return empty rows; their empty states rendered and no SQLite mock rows appeared. A timer was started and stopped, its draft was reviewed and discarded, and Save to Notion was not clicked. Console warnings/errors: none.
+- Live schema verification reached all six configured databases. Clients, Projects, Hours, and Invoice Reports satisfy the current required schema. Work Done is missing the six proposed report/privacy fields; Knowledge is missing the five proposed report/privacy fields. The endpoint reported `applySupported: false`; no schema mutation ran.
+- Created and linked the Vercel project `afp-workspace-invoice`, configured encrypted Preview environment variables, and enabled/confirmed Vercel deployment protection. The final preview deployment `dpl_B7Ck2NUcXdDVWSo1CZkKqxQVRZ8E` is Ready at `https://afp-workspace-invoice-gfyjtmkau-austinbrower-3014s-projects.vercel.app`.
+- The final preview health response reports Notion mode, `sqliteAllowed: false`, configured Notion access, general sync disabled, Vercel deployment protection, and no errors/warnings. Authenticated API checks returned valid empty live datasets plus the separate historical preview dataset. Chrome verified the protected production UI and Report Builder on the live Notion source with zero console warnings/errors.
+- One initial CLI deployment invocation targeted Production unexpectedly and failed during configuration validation because only Preview variables were intentionally configured. It did not create a Ready production deployment or promote an alias. The explicit replacement Preview deployment above built and verified successfully.
+
+### Remaining manual steps
+
+- Review and manually add the proposed Work Done and Knowledge properties in Notion before enabling those targeted writes; rerun the read-only verifier afterward.
+- Configure the documented Production environment variables and choose the final access-protection policy before a separately approved production deployment.
+- Run the existing one-time historical import only under a separate explicit approval after deployment and schema validation.

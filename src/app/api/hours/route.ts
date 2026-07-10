@@ -1,88 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb, newId, newSyncable, nowISO } from "@/lib/db";
-import { hoursRepo, listHoursByRange } from "@/lib/db/repositories/hours";
-import { projectRepo } from "@/lib/db/repositories/projects";
-import { workLogRepo } from "@/lib/db/repositories/worklogs";
-import { workspaceRepo } from "@/lib/db/repositories/workspaces";
-import { clientRepo } from "@/lib/db/repositories/clients";
-import { computeTotalHours, todayISO, nowTimeHHMM } from "@/lib/calculations";
-import { syncEntityNow } from "@/lib/notion/sync-engine";
+import { getDataProvider } from "@/lib/data/provider";
+import { newEntityBase } from "@/lib/data/entities";
+import { dataErrorResponse, NO_STORE_HEADERS } from "@/lib/data/route-utils";
+import { hoursInputSchema, validationMessages } from "@/lib/data/validation";
+import { exactElapsedMinutes } from "@/lib/reports/engine";
 import type { HoursEntry } from "@/types/domain";
 import type { HoursEntryWithRelations } from "@/types/api";
 
-/** Attach project name / related work log title so the table never shows raw ids. */
-function withRelations(entries: HoursEntry[]): HoursEntryWithRelations[] {
-  const projectMap = new Map(projectRepo.all().map((p) => [p.id, p.name]));
-  const workLogMap = new Map(workLogRepo.all().map((w) => [w.id, w.title]));
-  return entries.map((e) => ({
-    ...e,
-    projectName: e.projectId ? (projectMap.get(e.projectId) ?? null) : null,
-    workLogTitle: e.relatedWorkLogId ? (workLogMap.get(e.relatedWorkLogId) ?? null) : null,
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+async function withRelations(entries: HoursEntry[], provider: Awaited<ReturnType<typeof getDataProvider>>) {
+  const [projects, workLogs] = await Promise.all([provider.projects.list(), provider.workLogs.list()]);
+  const projectMap = new Map(projects.map((project) => [project.id, project.name]));
+  const workLogMap = new Map(workLogs.map((work) => [work.id, work.title]));
+  return entries.map((entry): HoursEntryWithRelations => ({
+    ...entry,
+    projectName: entry.projectId ? projectMap.get(entry.projectId) ?? null : null,
+    workLogTitle: entry.relatedWorkLogId ? workLogMap.get(entry.relatedWorkLogId) ?? null : null,
   }));
 }
-
-/**
- * GET /api/hours            -> all hours entries for the current client
- * GET /api/hours?start=&end= -> entries with date in [start, end] (inclusive, YYYY-MM-DD)
- */
 export async function GET(request: NextRequest) {
-  initDb();
-  const client = clientRepo.all()[0];
-  if (!client) return NextResponse.json<HoursEntryWithRelations[]>([]);
-
-  const start = request.nextUrl.searchParams.get("start");
-  const end = request.nextUrl.searchParams.get("end");
-
-  const entries =
-    start && end
-      ? listHoursByRange(client.id, start, end)
-      : hoursRepo.where("client_id = ?", [client.id], "date DESC, start_time DESC");
-
-  return NextResponse.json<HoursEntryWithRelations[]>(withRelations(entries));
+  try {
+    const provider = await getDataProvider();
+    const client = (await provider.clients.list())[0];
+    if (!client) return NextResponse.json([], { headers: NO_STORE_HEADERS });
+    const start = request.nextUrl.searchParams.get("start");
+    const end = request.nextUrl.searchParams.get("end");
+    let entries = (await provider.hours.list()).filter((entry) => entry.clientId === client.id);
+    if (start && end) entries = entries.filter((entry) => entry.date >= start && entry.date <= end);
+    entries.sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime));
+    return NextResponse.json(await withRelations(entries, provider), { headers: NO_STORE_HEADERS });
+  } catch (error) {
+    return dataErrorResponse(error);
+  }
 }
 
-/** POST /api/hours - create a new hours entry (manual or timer-sourced). */
 export async function POST(request: NextRequest) {
-  initDb();
-  const workspace = workspaceRepo.all()[0];
-  const client = clientRepo.all()[0];
-  if (!workspace || !client) {
-    return NextResponse.json({ error: "No workspace/client configured" }, { status: 400 });
+  try {
+    const body = await request.json().catch(() => null);
+    const parsed = hoursInputSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid hours entry.", details: validationMessages(parsed.error) }, { status: 400 });
+    }
+    const provider = await getDataProvider();
+    const [workspace, client] = await Promise.all([provider.workspace(), provider.clients.list().then((rows) => rows[0])]);
+    if (!workspace || !client) return NextResponse.json({ error: "No workspace/client configured." }, { status: 400 });
+    const exactMinutes = exactElapsedMinutes(parsed.data.startTime, parsed.data.endTime, parsed.data.breakMinutes);
+    if (exactMinutes <= 0) return NextResponse.json({ error: "Elapsed time must be greater than zero." }, { status: 400 });
+    const entry: HoursEntry = {
+      ...newEntityBase("hours"),
+      workspaceId: workspace.id,
+      clientId: client.id,
+      projectId: parsed.data.projectId,
+      date: parsed.data.date,
+      startTime: parsed.data.startTime,
+      endTime: parsed.data.endTime,
+      breakMinutes: parsed.data.breakMinutes,
+      totalHours: exactMinutes / 60,
+      hourlyRate: parsed.data.hourlyRate,
+      billable: parsed.data.billable,
+      location: parsed.data.location,
+      relatedWorkLogId: parsed.data.relatedWorkLogId,
+      notes: parsed.data.notes,
+      source: parsed.data.source,
+    };
+    const saved = await provider.hours.create(entry);
+    const [response] = await withRelations([saved.entity], provider);
+    return NextResponse.json({ ...response, persistence: saved }, { status: 201, headers: NO_STORE_HEADERS });
+  } catch (error) {
+    return dataErrorResponse(error);
   }
-
-  const body = await request.json().catch(() => ({}));
-
-  const startTime: string = typeof body.startTime === "string" && body.startTime ? body.startTime : nowTimeHHMM();
-  const endTime: string = typeof body.endTime === "string" && body.endTime ? body.endTime : startTime;
-  const breakMinutes = Number.isFinite(Number(body.breakMinutes)) ? Math.max(0, Number(body.breakMinutes)) : 0;
-
-  // Never trust a client-submitted totalHours - always derive it server-side.
-  const totalHours = computeTotalHours(startTime, endTime, breakMinutes);
-
-  const now = nowISO();
-  const entry: HoursEntry = {
-    id: newId("hr"),
-    workspaceId: workspace.id,
-    clientId: client.id,
-    projectId: typeof body.projectId === "string" && body.projectId ? body.projectId : null,
-    date: typeof body.date === "string" && body.date ? body.date : todayISO(),
-    startTime,
-    endTime,
-    breakMinutes,
-    totalHours,
-    hourlyRate: Number.isFinite(Number(body.hourlyRate)) ? Number(body.hourlyRate) : client.defaultHourlyRate,
-    billable: body.billable === undefined ? true : Boolean(body.billable),
-    location: typeof body.location === "string" ? body.location : "",
-    relatedWorkLogId: typeof body.relatedWorkLogId === "string" && body.relatedWorkLogId ? body.relatedWorkLogId : null,
-    notes: typeof body.notes === "string" ? body.notes : "",
-    source: body.source === "timer" ? "timer" : "manual",
-    ...newSyncable(),
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  hoursRepo.insert(entry);
-  await syncEntityNow("hours", entry.id);
-
-  return NextResponse.json<HoursEntryWithRelations>(withRelations([entry])[0], { status: 201 });
 }

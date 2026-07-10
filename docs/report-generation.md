@@ -1,6 +1,6 @@
 # Report Generation
 
-Phase 7 adds a read-only report composition system at `/reports`. It does not save report records, modify Hours Worked / Work Done / Knowledge records, apply Notion schema changes, or require two-way Notion sync.
+The report composition system at `/reports` previews and exports client-facing invoices and work reports without changing source Hours Worked, Work Done, Knowledge, or Project records. In Notion mode it reads current rows directly through the production provider; it never requires the general sync engine.
 
 ## Report types
 
@@ -36,7 +36,7 @@ Includes everything in the Simple Invoice plus each approved billable session (d
 - Reloading the builder restores the source description.
 - Source objects are never mutated; automated tests compare them before and after composition.
 - `ReportDocument` has no `internalNotes` property, so Markdown, HTML, PDF input, clipboard, and JSON serialization cannot expose it.
-- “Save report metadata to Invoice Reports” is disabled and labeled **Not enabled yet**.
+- “Save invoice metadata to Notion” is available only for a Notion-backed invoice after at least one export. It creates only an Invoice Reports metadata page after a second explicit click and does not write draft descriptions to source records.
 
 ## Privacy rules
 
@@ -66,19 +66,19 @@ Overnight sessions are supported. The approved historical preview produces 622 b
 
 ## Data-source selection
 
-The read-only `GET /api/report-builder` projection returns three independent datasets and never merges them:
+`GET /api/report-builder` returns mode-appropriate independent datasets and never merges them:
 
 | UI label | Contents |
 |---|---|
-| Notion data | SQLite cache rows with a non-null Notion page id |
+| Notion data | Current Clients, Projects, Hours, Work Done, Knowledge, and Invoice Reports queried directly from Notion |
 | Historical preview data | Approved deterministic July 8–9 source transcription |
-| Local mock data | SQLite rows without a Notion page id |
+| Local mock data | SQLite development rows, available only when `APP_DATA_SOURCE=mock` |
 
-Notion is recommended when cached Notion hours exist; otherwise the approved historical preview is recommended. Empty sources and periods render a useful empty state.
+Notion mode never loads or mixes local mock rows. The deterministic historical preview remains separately selectable for reconciliation and is never imported. Empty sources and periods render a useful empty state.
 
 ## Local report settings
 
-Settings stores contractor name, business name, email, phone, address, default rate/terms/notes, optional logo path, and client billing identity in the local-only `report_settings` SQLite table. The table has no sync metadata and is never passed to the Notion sync engine.
+Mock mode stores contractor name, business name, email, phone, address, default rate/terms/notes, optional logo path, and client billing identity in the local-only `report_settings` SQLite table. In Notion mode these values come from server-side `REPORT_*` environment variables and the Settings form is read-only, so Vercel has no local persistence dependency.
 
 ## Export formats
 
@@ -89,7 +89,7 @@ Settings stores contractor name, business name, email, phone, address, default r
 - **Clipboard** — copies the Markdown representation.
 - **JSON** — deterministic sanitized `ReportDocument` audit snapshot; internal notes are absent and titles of privacy-excluded records are redacted.
 
-## Proposed Notion fields (documented, not applied)
+## Proposed Notion fields (previewed, not applied)
 
 ### Work Done
 
@@ -113,4 +113,4 @@ Settings stores contractor name, business name, email, phone, address, default r
 | Project | relation to Projects |
 | Source Page | URL |
 
-The typed proposal is also recorded in `src/lib/reports/schema-proposal.ts` for validation and future migration work. Phase 7 does not call a Notion schema update API.
+The exact Phase 8 additive preview is recorded in `src/lib/notion/schema-requirements.ts`, shown in Settings, and returned with live read-only verification by `GET /api/notion/schema-preview`. Related Hours remains deferred. No schema update API is implemented or called.

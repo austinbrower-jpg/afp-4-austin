@@ -1,27 +1,18 @@
-import { initDb } from "@/lib/db";
-import { clientRepo } from "@/lib/db/repositories/clients";
-import { listProjectsByClient } from "@/lib/db/repositories/projects";
-import { workLogRepo } from "@/lib/db/repositories/worklogs";
+import { connection } from "next/server";
+import { getDataProvider } from "@/lib/data/provider";
 import { HoursWorkspace } from "@/features/hours/components/hours-workspace";
 
-/**
- * Server component: resolves the current client, project list, and work
- * log list directly from the DB (this app is single-tenant, so we use the
- * first seeded workspace/client rather than building a selector), then
- * hands them to the client-side workspace as picker options.
- */
 export default async function HoursPage() {
-  initDb();
-
-  const client = clientRepo.all()[0];
-  const projects = client ? listProjectsByClient(client.id) : [];
-  const workLogs = workLogRepo.all();
-
-  return (
-    <HoursWorkspace
-      projects={projects.map((p) => ({ id: p.id, name: p.name }))}
-      workLogs={workLogs.map((w) => ({ id: w.id, title: w.title, date: w.date }))}
-      defaultHourlyRate={client?.defaultHourlyRate ?? 0}
-    />
-  );
+  await connection();
+  const provider = await getDataProvider();
+  const [clients, projects, workLogs] = await Promise.all([
+    provider.clients.list(), provider.projects.list(), provider.workLogs.list(),
+  ]);
+  const client = clients[0];
+  return <HoursWorkspace
+    dataSourceMode={provider.mode}
+    projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+    workLogs={workLogs.map((work) => ({ id: work.id, title: work.title, date: work.date }))}
+    defaultHourlyRate={client?.defaultHourlyRate ?? 0}
+  />;
 }

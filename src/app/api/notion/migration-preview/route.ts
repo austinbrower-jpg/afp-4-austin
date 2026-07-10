@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildMigrationDryRun } from "@/lib/notion/migration/dry-run";
-import { loadExistingRecordsSnapshot } from "@/lib/notion/migration/read-existing";
+import { getAppDataSource } from "@/lib/data/runtime";
+import { EMPTY_SNAPSHOT } from "@/lib/notion/migration/types";
 
 /**
  * Phase 5 historical-migration dry run: read-only preview of what a real
@@ -12,7 +13,9 @@ import { loadExistingRecordsSnapshot } from "@/lib/notion/migration/read-existin
  */
 export async function GET() {
   try {
-    const snapshot = loadExistingRecordsSnapshot();
+    const snapshot = getAppDataSource() === "notion"
+      ? EMPTY_SNAPSHOT
+      : (await import("@/lib/notion/migration/read-existing")).loadExistingRecordsSnapshot();
     const result = buildMigrationDryRun(snapshot);
     return NextResponse.json(result);
   } catch (err) {
