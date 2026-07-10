@@ -5,7 +5,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileSliders } from "lucide-react";
 import { toast } from "sonner";
 import { apiGet, apiPatch } from "@/lib/api-client/http";
-import type { ReportSettings } from "@/lib/reports/types";
+import { DEFAULT_REPORT_SETTINGS, type ReportSettings } from "@/lib/reports/types";
+import {
+  saveBrowserReportSettings,
+  useBrowserReportSettings,
+} from "@/features/reports/lib/browser-report-settings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,26 +19,30 @@ import { Textarea } from "@/components/ui/textarea";
 
 const queryKey = ["report-settings"] as const;
 
-export function ReportSettingsCard({ readOnly = false }: { readOnly?: boolean }) {
+export function ReportSettingsCard({ notionMode = false }: { notionMode?: boolean }) {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const settingsQuery = useQuery({
     queryKey,
     queryFn: () => apiGet<ReportSettings>("/api/report-settings"),
   });
+  const baseline = useBrowserReportSettings(
+    settingsQuery.data ?? DEFAULT_REPORT_SETTINGS,
+    notionMode,
+  );
   const mutation = useMutation({
-    mutationFn: (settings: ReportSettings) =>
-      apiPatch<ReportSettings>("/api/report-settings", settings),
+    mutationFn: (settings: ReportSettings) => notionMode
+      ? Promise.resolve(saveBrowserReportSettings(settings))
+      : apiPatch<ReportSettings>("/api/report-settings", settings),
     onSuccess: (saved) => {
-      queryClient.setQueryData(queryKey, saved);
-      setForm(saved);
+      if (!notionMode) queryClient.setQueryData(queryKey, saved);
+      setForm(null);
       toast.success("Report settings saved locally");
     },
     onError: (error: Error) => toast.error(error.message || "Unable to save report settings"),
   });
   const [form, setForm] = useState<ReportSettings | null>(null);
-  if (data && form === null) setForm({ ...data });
 
-  if (isLoading || !form || !data) {
+  if (settingsQuery.isLoading) {
     return (
       <Card className="lg:col-span-2">
         <CardHeader><CardTitle>Contractor & Report Settings</CardTitle></CardHeader>
@@ -43,17 +51,38 @@ export function ReportSettingsCard({ readOnly = false }: { readOnly?: boolean })
     );
   }
 
+  if (settingsQuery.isError || !settingsQuery.data) {
+    return (
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <CardTitle>Contractor & Report Settings</CardTitle>
+          <CardDescription>Report settings could not be loaded.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-destructive">
+            {settingsQuery.error instanceof Error ? settingsQuery.error.message : "Unexpected report settings error."}
+          </p>
+          <Button variant="outline" onClick={() => settingsQuery.refetch()}>Try again</Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const activeForm = form ?? baseline;
+
   const set = (key: keyof ReportSettings, value: string | number) =>
-    setForm({ ...form, [key]: value });
-  const isDirty = JSON.stringify(form) !== JSON.stringify(data);
-  const invalidRate = !Number.isFinite(Number(form.defaultHourlyRate)) || Number(form.defaultHourlyRate) < 0;
+    setForm({ ...activeForm, [key]: value });
+  const isDirty = JSON.stringify(activeForm) !== JSON.stringify(baseline);
+  const invalidRate = !Number.isFinite(Number(activeForm.defaultHourlyRate)) || Number(activeForm.defaultHourlyRate) < 0;
 
   return (
     <Card className="lg:col-span-2">
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><FileSliders className="size-4" />Contractor & Report Settings</CardTitle>
         <CardDescription>
-          Local-only invoice identity and billing defaults. These values are never written to Notion.
+          {notionMode
+            ? "Browser-local invoice identity and billing defaults. These values are never written to Notion."
+            : "Local-only invoice identity and billing defaults. These values are never written to Notion."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -71,27 +100,27 @@ export function ReportSettingsCard({ readOnly = false }: { readOnly?: boolean })
           ] as const).map(([key, label, placeholder]) => (
             <div className="space-y-1.5" key={key}>
               <Label htmlFor={`report-${key}`}>{label}</Label>
-              <Input id={`report-${key}`} value={form[key]} placeholder={placeholder} disabled={readOnly} onChange={(event) => set(key, event.target.value)} />
+              <Input id={`report-${key}`} value={activeForm[key]} placeholder={placeholder} onChange={(event) => set(key, event.target.value)} />
             </div>
           ))}
           <div className="space-y-1.5">
             <Label htmlFor="report-rate">Default hourly rate</Label>
-            <Input id="report-rate" type="number" min="0" step="0.01" value={form.defaultHourlyRate} aria-invalid={invalidRate} disabled={readOnly} onChange={(event) => set("defaultHourlyRate", Number(event.target.value))} />
+            <Input id="report-rate" type="number" min="0" step="0.01" value={activeForm.defaultHourlyRate} aria-invalid={invalidRate} onChange={(event) => set("defaultHourlyRate", Number(event.target.value))} />
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="report-address">Address</Label>
-            <Textarea id="report-address" className="min-h-24" value={form.address} disabled={readOnly} onChange={(event) => set("address", event.target.value)} />
+            <Textarea id="report-address" className="min-h-24" value={activeForm.address} onChange={(event) => set("address", event.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="report-notes">Default invoice notes</Label>
-            <Textarea id="report-notes" className="min-h-24" value={form.defaultInvoiceNotes} disabled={readOnly} onChange={(event) => set("defaultInvoiceNotes", event.target.value)} />
+            <Textarea id="report-notes" className="min-h-24" value={activeForm.defaultInvoiceNotes} onChange={(event) => set("defaultInvoiceNotes", event.target.value)} />
           </div>
         </div>
         <div className="flex justify-end gap-2">
-          {isDirty && <Button variant="ghost" onClick={() => setForm({ ...data })}>Discard</Button>}
-          <Button disabled={readOnly || !isDirty || invalidRate || mutation.isPending} onClick={() => mutation.mutate(form)}>
+          {isDirty && <Button variant="ghost" onClick={() => setForm(null)}>Discard</Button>}
+          <Button disabled={!isDirty || invalidRate || mutation.isPending} onClick={() => mutation.mutate(activeForm)}>
             {mutation.isPending ? "Saving…" : "Save report settings"}
           </Button>
         </div>

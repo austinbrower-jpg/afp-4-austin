@@ -10,6 +10,7 @@ export function useSettings() {
   return useQuery({
     queryKey: settingsQueryKey,
     queryFn: settingsApi.get,
+    retry: false,
   });
 }
 

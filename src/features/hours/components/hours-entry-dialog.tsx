@@ -17,6 +17,7 @@ import { HoursEntryFormFields, type ProjectOption, type WorkLogOption } from "./
 import type { HoursEntryInput } from "../lib/types";
 import type { HoursEntryWithRelations } from "../lib/types";
 import type { AppDataSourceMode } from "@/lib/data/runtime-config";
+import { hoursSaveErrorMessage } from "../lib/save-error";
 
 function blankValues(defaultHourlyRate: number): HoursEntryInput {
   return {
@@ -102,8 +103,8 @@ export function HoursEntryDialog({
         toast.success(dataSourceMode === "notion" ? "Saved to Notion" : "Hours entry added");
       }
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to save hours entry");
+    } catch (error) {
+      toast.error(hoursSaveErrorMessage(error));
     }
   }
 

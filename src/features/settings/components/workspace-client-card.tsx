@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSettings, useUpdateClientSettings } from "../hooks/use-settings";
+import { workspaceClientViewState } from "../lib/workspace-client-state";
 
 interface FormState {
   name: string;
@@ -35,28 +36,20 @@ function toFormState(client: { name: string; defaultHourlyRate: number; timezone
 }
 
 export function WorkspaceClientCard({ readOnly = false }: { readOnly?: boolean }) {
-  const { data, isLoading } = useSettings();
+  const settingsQuery = useSettings();
   const { mutate: updateClient, isPending } = useUpdateClientSettings();
-
-  const [form, setForm] = useState<FormState | null>(null);
-  // Populate the form once, the first time client data loads - adjusted
-  // during render (idempotent once `form` is non-null) rather than in an
-  // effect, per React's guidance for this pattern.
-  if (data?.client && form === null) {
-    setForm(toFormState(data.client));
-  }
-
-  const client = data?.client;
-  const isDirty =
-    !!client &&
-    !!form &&
-    (form.name !== client.name ||
-      form.defaultHourlyRate !== String(client.defaultHourlyRate) ||
-      form.timezone !== client.timezone ||
-      form.notes !== client.notes);
+  const [draft, setDraft] = useState<{ clientId: string; form: FormState } | null>(null);
+  const viewState = workspaceClientViewState({
+    data: settingsQuery.data,
+    isLoading: settingsQuery.isLoading,
+    error: settingsQuery.error,
+  });
 
   function handleSave() {
-    if (!form) return;
+    if (viewState.status !== "configured") return;
+    const form = draft?.clientId === viewState.client.id
+      ? draft.form
+      : toFormState(viewState.client);
     const rate = Number(form.defaultHourlyRate);
     if (!form.name.trim()) {
       return;
@@ -73,10 +66,10 @@ export function WorkspaceClientCard({ readOnly = false }: { readOnly?: boolean }
   }
 
   function handleReset() {
-    if (client) setForm(toFormState(client));
+    setDraft(null);
   }
 
-  if (isLoading || !form) {
+  if (viewState.status === "loading") {
     return (
       <Card>
         <CardHeader>
@@ -93,6 +86,57 @@ export function WorkspaceClientCard({ readOnly = false }: { readOnly?: boolean }
     );
   }
 
+  if (viewState.status === "error") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Workspace & Client</CardTitle>
+          <CardDescription>Configuration could not be loaded.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-destructive">{viewState.message}</p>
+          <Button variant="outline" onClick={() => settingsQuery.refetch()}>
+            Try again
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (viewState.status === "empty") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Building2 className="size-4 text-muted-foreground" />
+            Workspace & Client
+          </CardTitle>
+          <CardDescription>{viewState.workspaceName} · client billing configuration</CardDescription>
+          <CardAction><Badge variant="outline">Not configured</Badge></CardAction>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border border-dashed p-5">
+            <p className="font-medium">No client configured yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {readOnly
+                ? "Add a row to the Notion Clients database when client-level defaults are needed. Report settings below remain available without one."
+                : "Add a client before editing client-level billing defaults. Report settings below remain available without one."}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const client = viewState.client;
+  const form = draft?.clientId === client.id ? draft.form : toFormState(client);
+  const setForm = (next: FormState) => setDraft({ clientId: client.id, form: next });
+  const isDirty =
+    form.name !== client.name ||
+    form.defaultHourlyRate !== String(client.defaultHourlyRate) ||
+    form.timezone !== client.timezone ||
+    form.notes !== client.notes;
+
   const rateInvalid =
     form.defaultHourlyRate.trim() === "" ||
     !Number.isFinite(Number(form.defaultHourlyRate)) ||
@@ -107,7 +151,7 @@ export function WorkspaceClientCard({ readOnly = false }: { readOnly?: boolean }
           Workspace & Client
         </CardTitle>
         <CardDescription>
-          {data?.workspace?.name ?? "Workspace"} · client billing configuration
+          {viewState.workspaceName} · client billing configuration
         </CardDescription>
         <CardAction>
           <Badge variant="outline">{client?.status ?? "active"}</Badge>

@@ -1353,3 +1353,61 @@ No Notion write path was called. No source Hours, Work Done, Project, Client, In
 - Review and manually add the proposed Work Done and Knowledge properties in Notion before enabling those targeted writes; rerun the read-only verifier afterward.
 - Configure the documented Production environment variables and choose the final access-protection policy before a separately approved production deployment.
 - Run the existing one-time historical import only under a separate explicit approval after deployment and schema validation.
+
+---
+
+## 2026-07-10 — Phase 9: Production activation Hours clientless fix (Codex)
+
+### Root cause and behavior change
+
+- The failed production Hours POST was rejected by the application before it reached Notion. The route required the first Client record for every provider, but the production Clients database is intentionally empty. The Hours payload and Notion Hours property mapping were not the cause, and Notion did not reject a property name or type.
+- In Notion mode, Hours POST now uses the provider's existing empty/unassigned client identity when the domain object requires `clientId`. It does not send a Client relation to Notion. Hours GET also returns valid Notion rows when no Client exists instead of filtering them out.
+- Mock mode retains the existing Client requirement and still returns the client-required 400 when no Client is configured.
+- Existing exact elapsed-minute calculation, non-billable `$0.00` amount, and omission of null Project and Related Work Log relations are preserved. No invalid null property values are sent to Notion.
+- Hours dialogs now surface the server-provided API error message, with a generic message only for unexpected errors.
+
+### Tests and verification
+
+- Added route coverage for Notion-mode create and GET with an empty Clients database, a one-minute non-billable entry, `$0.00` amount, omitted null Project/Related Work Log relations, and the preserved mock-mode Client requirement.
+- Added mapper/provider coverage proving the Date title is populated, optional relations are absent, and no null values are sent. Added UI error-helper coverage for server messages and the unexpected-error fallback.
+- `npm run lint` — pass (0 errors, 0 warnings).
+- `npm run typecheck` — pass.
+- `npm test` — pass, 215/215 tests across 20 files.
+- `npm run build` — pass with Next.js 16.2.10.
+- `git diff --check` — pass.
+
+### Deployment and safety
+
+- Protected Preview deployment `dpl_7mCHrjMs9FpVTpXaQ7GPRCLqcq3w` built successfully. Anonymous access redirects to Vercel SSO. Health reports Notion mode, SQLite disabled, general sync disabled, and Vercel deployment protection.
+- Preview Hours GET returned an empty array. A deliberately zero-duration POST reached the corrected path and returned the later expected validation error, `Elapsed time must be greater than zero.` It therefore stopped before provider creation; a follow-up GET remained empty. No Notion row was written.
+- Production deployment `dpl_AY9hNU7MwmccSEqzoyp6xoXs5XkP` built successfully, is Ready, and is aliased to `https://afp-workspace-invoice.vercel.app`. Anonymous access returns 401. Health reports Notion mode, SQLite disabled, `NOTION_SYNC_ENABLED=false`, Basic Auth, and no errors or warnings.
+- No production Hours POST or automatic smoke test was run. No Notion write, source-record change, live schema change, or historical import occurred during implementation, verification, or deployment.
+
+---
+
+## 2026-07-10 — Phase 9: Production Settings empty-client fix (Codex)
+
+### Root cause and behavior change
+
+- `/api/settings` and the Notion provider already settled successfully with `client: null` when the Clients database was empty. The Workspace & Client card nevertheless rendered its loading skeleton whenever its client form was null; because a null client correctly never initializes that form, the UI stayed on “Loading configuration...” forever after a successful request.
+- The card now models loading, configured client, no client configured, and explicit error states independently. An empty Clients database renders “No client configured yet,” while failures render their server message and a retry action. The Settings client request has a 15-second deadline and no automatic retries.
+- Notion-mode Contractor & Report Settings are now editable and persist in browser-local storage without SQLite, a Client row, or a Notion write. The Report Builder consumes the same browser-local override, using the server-side `REPORT_*` values as defaults.
+- The Notion Database Mapping card now runs its safe read-only schema verification automatically on page load, caches a successful result for five minutes, and retains manual refresh. It no longer resets to “Not checked yet” after every page refresh.
+
+### Tests and verification
+
+- Added Settings route coverage for an empty Clients database, a configured client, and a Notion API failure.
+- Added view-state coverage proving loading resolves to the no-client state and that configured/error states settle explicitly.
+- Added browser-local report-settings persistence coverage with no client dependency, including missing/invalid storage fallbacks. Added provider coverage for an empty Notion Clients query.
+- `npm run lint` — pass.
+- `npm run typecheck` — pass.
+- `npm test` — pass, 226/226 tests across 23 files.
+- `npm run build` — pass with Next.js 16.2.10.
+- `git diff --check` — pass.
+- Read-only local Notion-mode UI verification showed “No client configured yet,” editable report fields, successful browser-local save/readback after refresh, automatic all-six mapping Ready, and no lingering loading state. The temporary local test value was restored.
+
+### Deployment and safety
+
+- Protected Preview `dpl_7qhnM8sxsYAvs93Ar159MXqw1Tq9` is Ready. Anonymous access redirects to Vercel SSO. Health reports Notion mode, SQLite disabled, and sync disabled. `/api/settings` returned 200 with `client: null`; report settings returned 200; read-only database verification returned Ready for all six databases.
+- Production `dpl_4vxS6DYo8pHGcf8et3Q21WD6P7Jo` is Ready and aliased to `https://afp-workspace-invoice.vercel.app`. Anonymous Settings/API access returns 401. Health reports Notion mode, SQLite disabled, `NOTION_SYNC_ENABLED=false`, Basic Auth, and no errors or warnings.
+- Verification issued only GET requests plus browser-local Settings storage. No Notion record, schema, source record, or environment variable was created or changed. The historical import was not run. No commit or push occurred.

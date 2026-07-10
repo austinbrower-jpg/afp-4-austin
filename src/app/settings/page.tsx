@@ -22,7 +22,7 @@ export default async function SettingsPage() {
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <WorkspaceClientCard readOnly={notion} />
-        <ReportSettingsCard readOnly={notion} />
+        <ReportSettingsCard notionMode={notion} />
         {notion ? <NotionProductionCard config={config} /> : <NotionConnectionCard />}
         <NotionMappingCard />
         {!notion && <MigrationPreviewCard />}
