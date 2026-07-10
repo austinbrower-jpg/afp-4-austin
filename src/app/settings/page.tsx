@@ -5,6 +5,7 @@ import { ConflictsCard } from "@/features/settings/components/conflicts-card";
 import { MigrationPreviewCard } from "@/features/settings/components/migration-preview-card";
 import { MigrationImportCard } from "@/features/settings/components/migration-import-card";
 import { DesktopAppCard } from "@/features/settings/components/desktop-app-card";
+import { ReportSettingsCard } from "@/features/settings/components/report-settings-card";
 
 export default function SettingsPage() {
   return (
@@ -18,6 +19,7 @@ export default function SettingsPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <WorkspaceClientCard />
+        <ReportSettingsCard />
         <NotionConnectionCard />
         <NotionMappingCard />
         <MigrationPreviewCard />

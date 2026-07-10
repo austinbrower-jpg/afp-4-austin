@@ -1280,3 +1280,38 @@ Effectively the entire `src/` tree (180+ files) plus `electron/main.js`, `electr
 3. Finish Electron production packaging: have `electron/main.js` spawn a bundled Next.js server (e.g. `next build` with standalone output) when `app.isPackaged`, instead of assuming a dev server is already running.
 4. Make an initial git commit - the repo is `git init`-ed but nothing has been committed yet.
 5. Decide how Cursor/Composer and Claude Code should share this repo going forward (sequential handoffs vs. explicitly divided scope) to avoid a repeat of the concurrent-edit situation above.
+
+---
+
+## 2026-07-10 — Phase 7: Invoice and Work Report Generation (Codex)
+
+### Preflight and safety
+
+- Confirmed branch `feat/invoice-work-report-generation`, clean working tree, and `HEAD` exactly matched freshly fetched `origin/main` at `b2da39a` before implementation.
+- Did not run the historical import, create Notion records, apply Notion schema changes, enable sync, commit, or push.
+- `NOTION_SYNC_ENABLED` and `.env.local` were not changed.
+
+### Implementation
+
+- Added `/reports` Report Builder with source/client/date/project/report-type filters, invoice metadata, custom title/summary/notes, live preview, draft-only descriptions, included/excluded diagnostics, and validation warnings.
+- Added Simple Invoice, Detailed Invoice, and Detailed Work Log Report compositions.
+- Added pure report filtering, privacy, exact-minute billing, grouping, daily/project subtotals, deterministic composition, and sanitized serializers in `src/lib/reports/`.
+- Added isolated Notion-cache, approved historical-preview, and local-mock data projections. Sources are never silently mixed. Historical preview remains available without import and reconciles to $311.00.
+- Added PDF, standalone print-friendly HTML, HTML download, Markdown, clipboard, and JSON exports. The export view model contains no internal-notes field.
+- Added local-only contractor/report settings storage, API, and Settings card. `report_settings` has no Notion ids or sync path.
+- Added the disabled future Invoice Reports save action labeled “Not enabled yet.”
+- Documented the un-applied Work Done and Knowledge visibility schema proposal.
+
+### Tests and verification
+
+- Added 26 report-engine tests covering date/project/client/privacy filters, the proposed schema contract, missing visibility flags, invoice/work-report inclusion flags, exact minutes, $311.00 reconciliation, simple/detailed grouping, daily/project subtotals, empty/missing/long-content cases, work-report sections, immutability, determinism, excluded-title redaction, and internal-note exclusion from Markdown/HTML/JSON.
+- `npm test` — pass, 184/184.
+- `npm run typecheck` — pass.
+- `npm run lint` — pass after removing all warnings.
+- `npm run build` — pass; `/reports`, `/api/report-builder`, and `/api/report-settings` compiled.
+- Browser verified Simple Invoice, Detailed Invoice, Work Log Report, project filtering, $311.00 total, draft preview updates, draft reset after reload, clipboard Markdown, PDF button execution, local report settings, disabled future save, and zero console errors.
+- The automation browser blocked opening the generated `blob:` print tab by browser security policy; the standalone print HTML serializer and print CSS are covered by automated tests, but that pop-up could not be fully exercised in the automated browser. JSON download click completed without console error, though that browser did not surface a download event for artifact inspection.
+
+### Safety outcome
+
+No Notion write path was called. No source Hours, Work Done, Project, Client, Invoice Report, or Knowledge record was changed. Browser draft verification reloaded the builder and confirmed the original source description returned.

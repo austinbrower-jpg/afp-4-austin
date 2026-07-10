@@ -11,6 +11,7 @@ export * from "./repositories/hours";
 export * from "./repositories/worklogs";
 export * from "./repositories/knowledge";
 export * from "./repositories/invoices";
+export * from "./repositories/report-settings";
 export * from "./repositories/sync";
 
 /** Call at the top of every route handler before touching repositories. */
