@@ -1,0 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { describe, expect, it } from "vitest";
+import { searchInvoices } from "./search";
+describe("searchInvoices", () => { it("matches invoice number, client, project, session id, work log id, and date", () => { const invoice:any={id:"i",clientId:"c",invoiceNumber:"AFP-2026-001",periodStart:"2026-07-01",periodEnd:"2026-07-31",invoiceDate:"2026-08-01",summary:"",lineItems:[{workLogId:"w",title:"",description:"",hours:1}],hoursEntryIds:["h"],workDoneIds:["w"]}; const index:any={clients:[{id:"c",name:"Austin"}],projects:[{id:"p",name:"Hardening"}],hours:[{id:"h",projectId:"p",sessionId:"AFP-2026-07-001"}],workLogs:[{id:"w",projectId:"p",workLogId:"AFP-WORK-2026-07-001"}]}; for (const q of ["001","austin","hardening","07-001","work-2026","2026-08-01"]) expect(searchInvoices([invoice], index, q)).toHaveLength(1); }); });

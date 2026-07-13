@@ -135,3 +135,7 @@ Voiding an invoice does not automatically restore Hours to billable status. A fu
 - `src/lib/invoices/invoice-status.ts` — legacy status mapping
 - `src/lib/invoices/invoice-saved-view.ts` — immutable saved-invoice preview
 - `src/features/reports/components/invoice-save-panel.tsx` — Report Builder UI
+
+## Phase 15 timeline and dashboard hardening
+
+Invoices now have a read-only timeline model covering Created, Saved, Sent, Viewed (future-ready), Paid, and Voided events. The timeline is derived from existing invoice metadata and does not persist lifecycle events or mutate Notion.
