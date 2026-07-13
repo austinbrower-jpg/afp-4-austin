@@ -83,6 +83,14 @@ export interface Project extends BaseEntity {
 
 export type HoursEntrySource = "timer" | "manual";
 
+export type HoursBillingStatus =
+  | "draft"
+  | "reviewed"
+  | "ready-to-invoice"
+  | "invoiced"
+  | "paid"
+  | "superseded";
+
 export interface HoursEntry extends BaseEntity {
   workspaceId: ID;
   clientId: ID;
@@ -96,9 +104,14 @@ export interface HoursEntry extends BaseEntity {
   billable: boolean;
   location: string;
   relatedWorkLogId: ID | null;
+  /** Explicit Related Work Done relation ids when present on Notion row. */
+  relatedWorkDoneIds?: ID[];
   notes: string;
   source: HoursEntrySource;
   externalId?: string | null;
+  sessionId?: string | null;
+  billingStatus?: HoursBillingStatus | null;
+  invoiceReportId?: ID | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +128,13 @@ export interface Attachment {
   sizeBytes: number;
   addedAt: string;
 }
+
+export type WorkLogApprovalStatus =
+  | "draft"
+  | "needs-review"
+  | "approved"
+  | "sent-to-client"
+  | "archived";
 
 export interface WorkLog extends BaseEntity {
   workspaceId: ID;
@@ -138,6 +158,9 @@ export interface WorkLog extends BaseEntity {
   includeInInvoice?: boolean;
   includeInWorkReport?: boolean;
   evidenceLinks?: string[];
+  workLogId?: string | null;
+  approvalStatus?: WorkLogApprovalStatus | null;
+  invoiceReportId?: ID | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +219,14 @@ export interface InvoiceReport extends BaseEntity {
   summary: string;
   lineItems: InvoiceLineItem[];
   hoursEntryIds: ID[];
+  workDoneIds?: ID[];
   status: InvoiceStatus;
+  invoiceDate?: string | null;
+  dueDate?: string | null;
+  paymentTerms?: string | null;
+  sentDate?: string | null;
+  paidDate?: string | null;
+  pdfUrl?: string | null;
 }
 
 // ---------------------------------------------------------------------------

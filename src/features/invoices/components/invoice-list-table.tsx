@@ -42,9 +42,13 @@ export function InvoiceListTable({ invoices }: { invoices: InvoiceReport[] }) {
             <TableHead>Invoice #</TableHead>
             <TableHead>Period</TableHead>
             <TableHead className="text-right">Hours</TableHead>
+            <TableHead className="text-right">Included</TableHead>
             <TableHead className="text-right">Rate</TableHead>
             <TableHead className="text-right">Total</TableHead>
             <TableHead>Status</TableHead>
+            <TableHead>Sent</TableHead>
+            <TableHead>Paid</TableHead>
+            <TableHead>PDF</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -67,6 +71,11 @@ export function InvoiceListTable({ invoices }: { invoices: InvoiceReport[] }) {
               </TableCell>
               <TableCell className="text-right tabular-nums text-muted-foreground">
                 <Link href={`/invoices/${invoice.id}`} className="block">
+                  {invoice.hoursEntryIds.length}h / {invoice.workDoneIds?.length ?? 0}w
+                </Link>
+              </TableCell>
+              <TableCell className="text-right tabular-nums text-muted-foreground">
+                <Link href={`/invoices/${invoice.id}`} className="block">
                   {formatCurrency(invoice.hourlyRate)}/hr
                 </Link>
               </TableCell>
@@ -79,6 +88,25 @@ export function InvoiceListTable({ invoices }: { invoices: InvoiceReport[] }) {
                 <Link href={`/invoices/${invoice.id}`} className="block">
                   <InvoiceStatusBadge status={invoice.status} />
                 </Link>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                <Link href={`/invoices/${invoice.id}`} className="block">
+                  {invoice.sentDate ? fmtDate(invoice.sentDate) : "—"}
+                </Link>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                <Link href={`/invoices/${invoice.id}`} className="block">
+                  {invoice.paidDate ? fmtDate(invoice.paidDate) : "—"}
+                </Link>
+              </TableCell>
+              <TableCell>
+                {invoice.pdfUrl ? (
+                  <a href={invoice.pdfUrl} target="_blank" rel="noreferrer" className="text-sm underline">
+                    PDF
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
               </TableCell>
             </TableRow>
           ))}

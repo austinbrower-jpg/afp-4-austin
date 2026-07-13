@@ -382,3 +382,18 @@ Proposed Work Done additions: `Client Visible` (checkbox), `Include in Invoice` 
 Proposed Knowledge additions: `Client Visible` (checkbox), `Include in Work Report` (checkbox), `Report Summary` (rich text), `Project` (relation to Projects), and `Source Page` (URL).
 
 Until those fields are approved, applied, and mapped into the shared repository projection, cached Notion records with missing visibility flags are excluded by default. Phase 7 performs no Notion schema update, report save, historical import, or general sync enablement. `NOTION_SYNC_ENABLED` remains `false`.
+
+---
+
+## Phase 11 explicit relations (not applied)
+
+Phase 11 designs additive explicit relations for Hours Worked, Work Done, Invoice Reports, and Projects. The full proposal is in `src/lib/notion/relational-schema-proposal.ts` and [notion-relational-model.md](notion-relational-model.md).
+
+Key behaviors implemented in code (read-only / preview only):
+
+- Stable **Session ID** (`AFP-YYYY-MM-DD-###`) and **Work Log ID** (`AFP-WORK-YYYY-MM-DD-###`) helpers preserve Migration Key values.
+- **Quarantine** rows (`afp-history-v2-superseded-*`) stay visible but are excluded from operational totals.
+- **Relation backfill preview** at `GET /api/notion/relation-backfill-preview` proposes July 8–10 relations with no Notion writes.
+- **Invoice locking** architecture prevents duplicate billing during explicit save (not enabled for live writes in this phase).
+
+No live schema changes, no general sync enablement, and no deployment are part of Phase 11.

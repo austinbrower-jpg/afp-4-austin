@@ -7,6 +7,18 @@ import {
   parseISO,
 } from "date-fns";
 import type { HoursEntry } from "@/types/domain";
+import { isSupersededHours } from "@/lib/notion/quarantine";
+
+/** Hours rows included in operational and billing totals (excludes superseded/quarantine). */
+export function operationalHours(entries: HoursEntry[]): HoursEntry[] {
+  return entries.filter(
+    (entry) => !isSupersededHours({
+      migrationKey: entry.externalId,
+      externalId: entry.externalId,
+      billingStatus: entry.billingStatus,
+    }),
+  );
+}
 
 /** Minutes between two HH:mm times, wrapping past midnight if end < start. */
 export function minutesBetween(startTime: string, endTime: string): number {
@@ -56,13 +68,13 @@ export function getMonthRange(date: Date = new Date()) {
 }
 
 export function sumHours(entries: HoursEntry[]): number {
-  return Math.round(entries.reduce((acc, e) => acc + e.totalHours, 0) * 100) / 100;
+  return Math.round(operationalHours(entries).reduce((acc, e) => acc + e.totalHours, 0) * 100) / 100;
 }
 
 export function sumBillableAmount(entries: HoursEntry[]): number {
   return (
     Math.round(
-      entries.reduce(
+      operationalHours(entries).reduce(
         (acc, e) => acc + (e.billable ? e.totalHours * e.hourlyRate : 0),
         0,
       ) * 100,
@@ -75,14 +87,14 @@ export function entriesInRange(
   start: Date,
   end: Date,
 ): HoursEntry[] {
-  return entries.filter((e) =>
+  return operationalHours(entries).filter((e) =>
     isWithinInterval(parseISO(e.date), { start, end }),
   );
 }
 
 export function entriesToday(entries: HoursEntry[], date: Date = new Date()): HoursEntry[] {
   const iso = date.toISOString().slice(0, 10);
-  return entries.filter((e) => e.date === iso);
+  return operationalHours(entries).filter((e) => e.date === iso);
 }
 
 export function todayISO(): string {

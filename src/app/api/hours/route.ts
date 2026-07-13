@@ -3,6 +3,7 @@ import { getDataProvider } from "@/lib/data/provider";
 import { newEntityBase } from "@/lib/data/entities";
 import { dataErrorResponse, NO_STORE_HEADERS } from "@/lib/data/route-utils";
 import { hoursInputSchema, validationMessages } from "@/lib/data/validation";
+import { isSupersededHours } from "@/lib/notion/quarantine";
 import { exactElapsedMinutes } from "@/lib/reports/engine";
 import type { HoursEntry } from "@/types/domain";
 import type { HoursEntryWithRelations } from "@/types/api";
@@ -11,13 +12,24 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function withRelations(entries: HoursEntry[], provider: Awaited<ReturnType<typeof getDataProvider>>) {
-  const [projects, workLogs] = await Promise.all([provider.projects.list(), provider.workLogs.list()]);
+  const [projects, workLogs, invoices] = await Promise.all([
+    provider.projects.list(),
+    provider.workLogs.list(),
+    provider.invoices.list(),
+  ]);
   const projectMap = new Map(projects.map((project) => [project.id, project.name]));
   const workLogMap = new Map(workLogs.map((work) => [work.id, work.title]));
+  const invoiceMap = new Map(invoices.map((inv) => [inv.id, inv.invoiceNumber]));
   return entries.map((entry): HoursEntryWithRelations => ({
     ...entry,
     projectName: entry.projectId ? projectMap.get(entry.projectId) ?? null : null,
     workLogTitle: entry.relatedWorkLogId ? workLogMap.get(entry.relatedWorkLogId) ?? null : null,
+    invoiceReportLabel: entry.invoiceReportId ? invoiceMap.get(entry.invoiceReportId) ?? null : null,
+    superseded: isSupersededHours({
+      migrationKey: entry.externalId,
+      externalId: entry.externalId,
+      billingStatus: entry.billingStatus,
+    }),
   }));
 }
 export async function GET(request: NextRequest) {

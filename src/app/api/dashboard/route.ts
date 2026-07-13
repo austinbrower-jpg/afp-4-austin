@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDataProvider } from "@/lib/data/provider";
 import { dataErrorResponse, NO_STORE_HEADERS } from "@/lib/data/route-utils";
-import { entriesInRange, entriesToday, getMonthRange, getWeekRange, sumBillableAmount, sumHours, todayISO } from "@/lib/calculations";
+import { entriesInRange, entriesToday, getMonthRange, getWeekRange, operationalHours, sumBillableAmount, sumHours, todayISO } from "@/lib/calculations";
 import type { DashboardSummary } from "@/types/api";
 import type { Priority } from "@/types/domain";
 
@@ -16,7 +16,7 @@ export async function GET() {
       provider.workspace(), provider.clients.list(), provider.projects.list(), provider.hours.list(), provider.workLogs.list(), provider.knowledge.list(), provider.invoices.list(),
     ]);
     const client = clients[0] ?? null;
-    const clientHours = client ? hours.filter((entry) => entry.clientId === client.id) : [];
+    const clientHours = operationalHours(client ? hours.filter((entry) => entry.clientId === client.id) : hours);
     const week = getWeekRange();
     const month = getMonthRange();
     const latestInvoice = invoices.sort((a, b) => b.periodEnd.localeCompare(a.periodEnd))[0] ?? null;

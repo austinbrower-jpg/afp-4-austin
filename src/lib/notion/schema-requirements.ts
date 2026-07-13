@@ -1,4 +1,9 @@
 import type { SyncEntityType } from "@/types/domain";
+import {
+  PHASE11_RELATIONAL_SCHEMA_PROPOSAL,
+  type ProposedProperty,
+  type RelationTarget,
+} from "./relational-schema-proposal";
 
 /**
  * Pure data + pure validation logic for the read-only database mapping
@@ -224,3 +229,107 @@ export function isMappingReady(
 ): boolean {
   return apiKeyConfigured && databases.length > 0 && databases.every(isDatabaseReady);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 11 relational schema verification (read-only, additive proposal)
+// ---------------------------------------------------------------------------
+
+export interface RelationalPropertyCheck {
+  database: string;
+  name: string;
+  expectedType: NotionPropertyType;
+  status: PropertyCheckStatus;
+  actualType?: string;
+  relationTarget?: RelationTarget;
+  expectedRelationTarget?: RelationTarget;
+  selectOptions?: string[];
+  expectedSelectOptions?: string[];
+  reciprocal?: string;
+}
+
+const ENTITY_TO_DATABASE: Record<string, string> = {
+  hours: "Hours Worked",
+  worklog: "Work Done",
+  invoice: "Invoice Reports",
+  project: "Projects",
+};
+
+function proposedToRequirement(prop: ProposedProperty): {
+  notionName: string;
+  expectedType: NotionPropertyType;
+  relationTarget?: RelationTarget;
+  selectOptions?: string[];
+  reciprocal?: string;
+} {
+  if (prop.type === "relation") {
+    return {
+      notionName: prop.name,
+      expectedType: "relation",
+      relationTarget: prop.target,
+      reciprocal: prop.reciprocal,
+    };
+  }
+  if (prop.type === "select") {
+    return {
+      notionName: prop.name,
+      expectedType: "select",
+      selectOptions: prop.options.map((o) => o.name),
+    };
+  }
+  return { notionName: prop.name, expectedType: prop.type };
+}
+
+export function relationalSchemaChecks(
+  actualByDatabase: Record<string, Record<string, NotionPropertyLike> | null | undefined>,
+): RelationalPropertyCheck[] {
+  const checks: RelationalPropertyCheck[] = [];
+  for (const db of PHASE11_RELATIONAL_SCHEMA_PROPOSAL) {
+    const actual = actualByDatabase[db.database];
+    for (const prop of db.properties) {
+      const req = proposedToRequirement(prop);
+      const found = actual?.[req.notionName];
+      if (!found) {
+        checks.push({
+          database: db.database,
+          name: req.notionName,
+          expectedType: req.expectedType,
+          status: "missing",
+          expectedRelationTarget: req.relationTarget,
+          expectedSelectOptions: req.selectOptions,
+          reciprocal: req.reciprocal,
+        });
+        continue;
+      }
+      if (found.type !== req.expectedType) {
+        checks.push({
+          database: db.database,
+          name: req.notionName,
+          expectedType: req.expectedType,
+          actualType: found.type,
+          status: "wrong-type",
+          expectedRelationTarget: req.relationTarget,
+          expectedSelectOptions: req.selectOptions,
+          reciprocal: req.reciprocal,
+        });
+        continue;
+      }
+      checks.push({
+        database: db.database,
+        name: req.notionName,
+        expectedType: req.expectedType,
+        status: "ok",
+        actualType: found.type,
+        expectedRelationTarget: req.relationTarget,
+        expectedSelectOptions: req.selectOptions,
+        reciprocal: req.reciprocal,
+      });
+    }
+  }
+  return checks;
+}
+
+export function mapEntityTypeToDatabaseLabel(type: SyncEntityType): string | null {
+  return ENTITY_TO_DATABASE[type] ?? null;
+}
+
+export { PHASE11_RELATIONAL_SCHEMA_PROPOSAL };

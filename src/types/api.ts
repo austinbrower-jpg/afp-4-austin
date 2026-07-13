@@ -21,6 +21,8 @@ import type {
 export interface HoursEntryWithRelations extends HoursEntry {
   projectName: string | null;
   workLogTitle: string | null;
+  invoiceReportLabel?: string | null;
+  superseded?: boolean;
 }
 
 /** Payload accepted by POST /api/hours and PATCH /api/hours/[id]. */
