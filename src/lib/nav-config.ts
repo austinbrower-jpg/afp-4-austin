@@ -5,6 +5,7 @@ import {
   ClipboardList,
   FileText,
   FileOutput,
+  ChartColumn,
   FolderKanban,
   BookOpen,
   StickyNote,
@@ -59,6 +60,12 @@ export const NAV: NavEntry[] = [
         href: "/invoices",
         icon: FileText,
         description: "Generate and export invoices",
+      },
+      {
+        title: "Invoice Dashboard",
+        href: "/invoices/dashboard",
+        icon: ChartColumn,
+        description: "Review invoice health and client billing history",
       },
       {
         title: "Report Builder",
