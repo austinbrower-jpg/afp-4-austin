@@ -3,6 +3,7 @@
  * Keep these out of app API routes and feature api modules so neither layer owns types.
  */
 
+import type { InvoiceTimelineEvent } from "@/lib/invoices/timeline";
 import type {
   Client,
   HoursEntry,
@@ -92,6 +93,7 @@ export interface InvoiceDetailResponse extends InvoiceReport {
     hourlyRate: number;
   };
   notionPageUrl: string | null;
+  timeline: InvoiceTimelineEvent[];
 }
 
 // ---------------------------------------------------------------------------

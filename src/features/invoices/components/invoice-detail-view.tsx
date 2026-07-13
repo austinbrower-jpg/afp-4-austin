@@ -180,6 +180,23 @@ export function InvoiceDetailView({ invoiceId }: { invoiceId: string }) {
         </CardContent>
       </Card>
 
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Invoice timeline</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ol className="space-y-2 text-sm">
+            {invoice.timeline.map((event) => (
+              <li key={event.type} className="flex items-center justify-between gap-3 rounded-md border p-2">
+                <span>{event.label}</span>
+                <span className="text-muted-foreground">{event.at ? fmtDate(event.at) : event.status === "future" ? "Future-ready" : "—"}</span>
+              </li>
+            ))}
+          </ol>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Included relations</CardTitle>
