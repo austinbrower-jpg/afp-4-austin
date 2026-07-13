@@ -61,7 +61,7 @@
   },
   "build": {
     "appId": "com.austinbrower.afp-workspace",
-    "productName": "AFP Workspace",
+    "productName": "Battle Bound Branding Client Reporting Portal",
     "directories": {
       "output": "release"
     },

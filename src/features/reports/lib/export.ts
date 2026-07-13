@@ -61,16 +61,29 @@ export function downloadReportPdf(report: ReportDocument) {
   const footerY = pageHeight - 26;
   let y = 0;
 
+  // Only data-URI logos can be embedded synchronously; a plain URL/path is
+  // shown as text branding instead of risking an async fetch/CORS failure
+  // inside PDF generation.
+  const logoIsEmbeddable = report.contractor.logoPath.startsWith("data:image");
+
   const drawHeader = () => {
     pdf.setFillColor(23, 61, 94);
     pdf.rect(0, 0, pageWidth, 64, "F");
+    if (logoIsEmbeddable) {
+      try {
+        pdf.addImage(report.contractor.logoPath, margin, 14, 36, 36);
+      } catch {
+        // Malformed data URI - fall back to text-only branding.
+      }
+    }
+    const textX = logoIsEmbeddable ? margin + 46 : margin;
     pdf.setTextColor(255, 255, 255);
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(17);
-    pdf.text(report.title, margin, 31);
+    pdf.text(report.title, textX, 31);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
-    pdf.text(`${report.client.name} · ${report.invoice.periodStart} to ${report.invoice.periodEnd}`, margin, 47);
+    pdf.text(`${report.client.name} · ${report.invoice.periodStart} to ${report.invoice.periodEnd}`, textX, 47);
     pdf.text(report.source.label, pageWidth - margin, 47, { align: "right" });
     pdf.setTextColor(23, 32, 51);
     y = 88;
@@ -108,10 +121,14 @@ export function downloadReportPdf(report: ReportDocument) {
   const labelValue = (label: string, value: string) => text(`${label}: ${value}`, { size: 8, gap: 2 });
 
   drawHeader();
+  const businessLabel = report.contractor.businessName || report.contractor.name;
   const from = [report.contractor.name, report.contractor.businessName].filter(Boolean).join(" · ") || "—";
   labelValue("From", from);
   labelValue("Client", report.client.name);
-  if (report.type !== "work-log-report") {
+  if (report.type === "work-log-report") {
+    labelValue("Prepared for", report.client.name);
+    labelValue("Prepared by", businessLabel);
+  } else {
     labelValue("Invoice", report.invoice.number || "Not provided");
     labelValue("Invoice date", report.invoice.invoiceDate || "Not provided");
     labelValue("Due date / terms", `${report.invoice.dueDate || "Not provided"} · ${report.invoice.paymentTerms || "Not provided"}`);
@@ -127,7 +144,7 @@ export function downloadReportPdf(report: ReportDocument) {
       text(`${line.projectName} — ${line.description}`, { size: 8, indent: 10, gap: 7 });
     }
   } else if (report.type === "work-log-report") {
-    heading("Daily work breakdown");
+    heading("Completed work");
     for (const item of report.workItems) {
       text(`${item.date} · ${item.title}`, { bold: true, size: 10, gap: 2 });
       text(`${item.projectName} — ${item.description}`, { size: 8, indent: 10, gap: 4 });
@@ -142,6 +159,21 @@ export function downloadReportPdf(report: ReportDocument) {
       }
       text(`Related time: ${formatMinutes(item.relatedHoursMinutes)}`, { size: 7, indent: 16, gap: 8 });
     }
+
+    heading("Screenshots");
+    text("Screenshot attachments are coming soon.", { size: 8 });
+
+    const evidenceLinks = [...new Set(report.workItems.flatMap((item) => item.evidenceLinks))];
+    if (evidenceLinks.length) {
+      heading("Evidence links");
+      for (const link of evidenceLinks) text(link, { size: 8, gap: 2 });
+    }
+
+    heading("Work log");
+    for (const line of report.sessions) {
+      text(`${line.date}  ${line.startTime}–${line.endTime}  ·  ${line.projectName}  ·  ${formatMinutes(line.exactMinutes)}`, { size: 8, gap: 2 });
+    }
+
     if (report.knowledgeItems.length) {
       heading("Related knowledge");
       for (const item of report.knowledgeItems) {
@@ -158,7 +190,7 @@ export function downloadReportPdf(report: ReportDocument) {
     }
   }
 
-  heading(report.type === "work-log-report" ? "Hours by project" : "Project totals");
+  heading(report.type === "work-log-report" ? "Project summary" : "Project totals");
   for (const row of report.projectTotals) {
     text(`${row.label}: ${formatMinutes(row.exactMinutes)} · ${formatMoney(row.amount)}`, { size: 9, gap: 3 });
   }
@@ -172,6 +204,10 @@ export function downloadReportPdf(report: ReportDocument) {
       heading("Notes");
       text(report.invoice.notes);
     }
+    if (report.contractor.paymentInstructions) {
+      heading("Payment instructions");
+      text(report.contractor.paymentInstructions);
+    }
   }
 
   const pages = pdf.getNumberOfPages();
@@ -180,7 +216,10 @@ export function downloadReportPdf(report: ReportDocument) {
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
     pdf.setTextColor(112, 122, 135);
-    pdf.text(`${report.title} · Page ${page} of ${pages}`, pageWidth / 2, footerY, { align: "center" });
+    const footerLabel = report.contractor.invoiceFooter
+      ? `${report.contractor.invoiceFooter} · ${businessLabel} · Page ${page} of ${pages}`
+      : `${businessLabel} · Page ${page} of ${pages}`;
+    pdf.text(footerLabel, pageWidth / 2, footerY, { align: "center" });
   }
   pdf.save(filename(report, "pdf"));
 }

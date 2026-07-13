@@ -1,6 +1,6 @@
-# AFP Workspace
+# Battle Bound Branding Client Reporting Portal
 
-A private contractor workspace for Hours Worked, Work Done, projects, knowledge, and invoice/work-report generation. The browser app can run with seeded local data or use Notion as its production source of truth.
+Battle Bound Branding's private client reporting and invoicing portal. Notion is the permanent source of truth for Hours Worked, Work Done, Projects, Clients, and Knowledge; this application reads that data to produce professional invoices, work reports, and dashboards for clients. See [docs/product-direction.md](docs/product-direction.md) for the product direction and read/write boundaries.
 
 ## Runtime modes
 
@@ -75,14 +75,17 @@ npm run dev
 
 | Route | Purpose |
 |---|---|
-| `/` | Dashboard and runtime status |
-| `/hours` | Timer, manual drafts, and saved hours |
-| `/work-done` | Work Done list, create, and detail editing |
-| `/projects` | Project list and targeted project editing |
+| `/` | Dashboard: today/week/month hours, ready-to-invoice/already-invoiced/outstanding, recent invoices/projects/work, quick actions |
+| `/clients` | Read-only client roster: revenue, outstanding balance, last invoice |
+| `/clients/[id]` | Read-only client detail: projects, hours, invoices, work history |
+| `/hours` | Timer and manual drafts (local drafts only when Notion is the source of truth) |
+| `/work-done` | Work Done list, create, and detail editing (local drafts only) |
+| `/projects` | Project list and targeted project editing (local drafts only), including related invoices |
 | `/knowledge/*` | Read-only live knowledge in Notion mode |
 | `/invoices` | Invoice Report metadata |
-| `/reports` | Invoice and work-report preview/export |
-| `/settings` | Runtime status, schema preview, read-only verification |
+| `/invoices/dashboard` | Read-only invoice health and client billing history |
+| `/reports` | Invoice and work-report builder, preview, and export (the star feature) |
+| `/settings` | Business branding, runtime status, schema preview, read-only verification |
 | `/settings/relation-backfill-preview` | Read-only July 8–10 explicit relation backfill preview |
 | `/api/health` | Unauthenticated secret-safe health status |
 
@@ -91,3 +94,16 @@ The Electron scaffold and historical migration tooling remain available for loca
 ## Phase 15 production hardening
 
 Phase 15 adds a read-only Invoice Dashboard at `/invoices/dashboard`, financial reporting models, richer invoice search helpers, invoice timelines, a future PDF storage abstraction, centralized API error formatting, and Notion adapter helper utilities. These additions are code-only and do not enable live Notion writes or production deployment.
+
+## Phase 16: Battle Bound Branding Client Reporting Portal
+
+Phase 16 repositions the application as Battle Bound Branding's client reporting and invoicing portal, on top of the same read-mostly Notion-native architecture:
+
+- **Branding** — Settings now manages business name (defaults to **Battle Bound Branding LLC**), logo, address, email, phone, website, invoice footer, and payment instructions. These values are the default branding on every export: PDF, print HTML, Markdown, HTML, and the live preview.
+- **Dashboard** — redesigned around Ready to Invoice / Already Invoiced / Outstanding, Recent Invoices, Recent Projects, and Quick Actions (Generate Invoice, Generate Work Report, View Invoice Dashboard, View Time History).
+- **Clients** — new read-only `/clients` and `/clients/[id]` pages showing projects, hours, invoices, work history, revenue, outstanding balance, and last invoice per client.
+- **Report Builder** — a step-orientation strip and prominent business branding make the existing choose-client → choose-dates → review-sessions → review-work-logs → preview → export → optional-save-to-Notion flow clearer as the app's star feature. The gated Save Invoice to Notion flow is unchanged.
+- **Work reports** — the Detailed Work Log Report gains Prepared for/Prepared by, a Screenshots placeholder, a consolidated Evidence Links section, and a raw Work Log session table, across the live preview, PDF, Markdown, and HTML outputs.
+- **Reduced editing** — Hours, Work Done, and Projects pages show a "Notion is the source of truth" banner with an Open in Notion link (in Notion mode); existing edit forms remain as explicitly local drafts rather than being removed outright.
+
+See [docs/product-direction.md](docs/product-direction.md) for the full product direction. Phase 16 is code-only: no live Notion writes, no new environment variables, no invoice saves outside the existing gated flow, and no production deployment.

@@ -19,13 +19,16 @@ Includes everything in the Simple Invoice plus each approved billable session (d
 
 ### Detailed Work Log Report
 
-- Report identity, client, period, and executive summary
-- Daily client-visible Work Done entries
-- Deliverables, testing/verification, client-visible blockers, follow-ups, and evidence
+- Report identity, "Prepared for" (client) and "Prepared by" (business name), period, and executive summary
+- Completed Work — daily client-visible Work Done entries with deliverables, testing/verification, client-visible blockers, follow-ups, and evidence
+- Screenshots — placeholder section reserved for a future attachment workflow
+- Evidence Links — consolidated list of every evidence link across included work items
+- Work Log — a raw session-level time table (date, time, project, duration) independent of the narrative Completed Work section
 - Related client-visible Knowledge summaries and source links
 - Related time per work entry
-- Hours by day and project
-- Total billable and non-billable time
+- Hours by day and Project Summary
+- Time Summary — total billable and non-billable time
+- Professional footer with the invoice footer text and business name
 
 ## Read-only and immutable behavior
 
@@ -91,13 +94,15 @@ Overnight sessions are supported. The corrected July 8–10 operational dataset 
 
 Notion mode never loads or mixes local mock rows. The deterministic historical preview remains separately selectable for reconciliation and is never imported. Empty sources and periods render a useful empty state.
 
-## Local report settings
+## Local report settings and branding (Phase 16)
 
-Mock mode stores contractor name, business name, email, phone, address, default rate/terms/notes, optional logo path, and client billing identity in the local-only `report_settings` SQLite table. In Notion mode these values come from server-side `REPORT_*` environment variables and the Settings form is read-only, so Vercel has no local persistence dependency.
+Mock mode stores contractor name, business name, email, phone, address, website, default rate/terms/notes, logo path, invoice footer, payment instructions, and client billing identity in the local-only `report_settings` SQLite table, editable from the Settings page's "Business Branding & Report Settings" card. These values become the defaults for every export (PDF, print HTML, Markdown, HTML, and the live preview) — the business name defaults to **Battle Bound Branding LLC**.
+
+In Notion mode most of these values come from server-side `REPORT_*` environment variables and the Settings form is read-only; `website`, `invoiceFooter`, and `paymentInstructions` are not environment-configurable (no new env vars were introduced for Phase 16) and instead always use the Battle Bound Branding defaults in Notion mode, so Vercel has no local persistence dependency.
 
 ## Export formats
 
-- **PDF** — jsPDF letter layout, repeating branded header, safe wrapping, page breaks, and page `n of total` footer.
+- **PDF** — jsPDF letter layout, repeating branded header (embeds the business logo when `logoPath` is a `data:image` URI), safe wrapping, page breaks, a branded footer with the invoice footer text, and page `n of total`.
 - **Print HTML** — standalone letter-size HTML with repeating table headers, print page-break controls, and a Print / save PDF button.
 - **HTML download** — the same standalone print document.
 - **Markdown** — client-facing report content only.

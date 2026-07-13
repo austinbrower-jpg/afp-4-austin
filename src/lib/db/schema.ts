@@ -161,10 +161,13 @@ CREATE TABLE IF NOT EXISTS report_settings (
   email TEXT NOT NULL DEFAULT '',
   phone TEXT NOT NULL DEFAULT '',
   address TEXT NOT NULL DEFAULT '',
+  website TEXT NOT NULL DEFAULT '',
   default_hourly_rate REAL NOT NULL DEFAULT 0,
   default_payment_terms TEXT NOT NULL DEFAULT '',
   default_invoice_notes TEXT NOT NULL DEFAULT '',
   logo_path TEXT NOT NULL DEFAULT '',
+  invoice_footer TEXT NOT NULL DEFAULT '',
+  payment_instructions TEXT NOT NULL DEFAULT '',
   client_display_name TEXT NOT NULL DEFAULT '',
   client_billing_contact TEXT NOT NULL DEFAULT '',
   client_billing_email TEXT NOT NULL DEFAULT ''

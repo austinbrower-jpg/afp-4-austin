@@ -6,8 +6,8 @@ import { TopBar } from "@/components/layout/top-bar";
 import { SidebarInset } from "@/components/ui/sidebar";
 
 export const metadata: Metadata = {
-  title: "AFP Workspace",
-  description: "Contractor workspace for tracking hours, work, and invoices, synced with Notion.",
+  title: "Battle Bound Branding Client Reporting Portal",
+  description: "Battle Bound Branding's client reporting and invoicing portal - reads hours, work, and invoices synced from Notion to produce professional client deliverables.",
 };
 
 export default function RootLayout({

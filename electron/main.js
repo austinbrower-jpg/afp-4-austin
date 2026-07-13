@@ -35,7 +35,7 @@ async function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 640,
-    title: "AFP Workspace",
+    title: "Battle Bound Branding Client Reporting Portal",
     backgroundColor: "#0a0a0a",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),

@@ -78,25 +78,26 @@ export function ReportSettingsCard({ notionMode = false }: { notionMode?: boolea
   return (
     <Card className="lg:col-span-2">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><FileSliders className="size-4" />Contractor & Report Settings</CardTitle>
+        <CardTitle className="flex items-center gap-2"><FileSliders className="size-4" />Business Branding & Report Settings</CardTitle>
         <CardDescription>
           {notionMode
-            ? "Browser-local invoice identity and billing defaults. These values are never written to Notion."
-            : "Local-only invoice identity and billing defaults. These values are never written to Notion."}
+            ? "Browser-local branding, invoice identity, and billing defaults used on every export. These values are never written to Notion."
+            : "Local-only branding, invoice identity, and billing defaults used on every export. These values are never written to Notion."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {([
+            ["businessName", "Business name", "Battle Bound Branding LLC"],
             ["contractorName", "Contractor name", "Austin Brower"],
-            ["businessName", "Business name", "Optional"],
-            ["email", "Email", "contractor@example.com"],
-            ["phone", "Phone", "Optional"],
+            ["email", "Business email", "hello@battleboundbranding.com"],
+            ["phone", "Business phone", "Optional"],
+            ["website", "Website", "https://battleboundbranding.com"],
+            ["logoPath", "Business logo (URL or path)", "/absolute/path/logo.png"],
             ["clientDisplayName", "Client display name", "Defaults to selected client"],
             ["clientBillingContact", "Client billing contact", "Optional"],
             ["clientBillingEmail", "Client billing email", "billing@example.com"],
             ["defaultPaymentTerms", "Default payment terms", "Net 15"],
-            ["logoPath", "Optional logo path", "/absolute/path/logo.png"],
           ] as const).map(([key, label, placeholder]) => (
             <div className="space-y-1.5" key={key}>
               <Label htmlFor={`report-${key}`}>{label}</Label>
@@ -110,12 +111,22 @@ export function ReportSettingsCard({ notionMode = false }: { notionMode?: boolea
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="report-address">Address</Label>
+            <Label htmlFor="report-address">Business address</Label>
             <Textarea id="report-address" className="min-h-24" value={activeForm.address} onChange={(event) => set("address", event.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="report-notes">Default invoice notes</Label>
             <Textarea id="report-notes" className="min-h-24" value={activeForm.defaultInvoiceNotes} onChange={(event) => set("defaultInvoiceNotes", event.target.value)} />
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="report-footer">Invoice footer</Label>
+            <Textarea id="report-footer" className="min-h-20" placeholder="Thank you for choosing Battle Bound Branding LLC." value={activeForm.invoiceFooter} onChange={(event) => set("invoiceFooter", event.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="report-payment-instructions">Payment instructions</Label>
+            <Textarea id="report-payment-instructions" className="min-h-20" placeholder="Optional wire/ACH/PayPal details shown on invoices" value={activeForm.paymentInstructions} onChange={(event) => set("paymentInstructions", event.target.value)} />
           </div>
         </div>
         <div className="flex justify-end gap-2">

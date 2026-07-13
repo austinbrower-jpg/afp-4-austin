@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDataProvider } from "@/lib/data/provider";
 import { dataErrorResponse, NO_STORE_HEADERS } from "@/lib/data/route-utils";
 import { entriesInRange, entriesToday, getMonthRange, getWeekRange, operationalHours, sumBillableAmount, sumHours, todayISO } from "@/lib/calculations";
+import { roundCurrency } from "@/lib/reports/engine";
 import type { DashboardSummary } from "@/types/api";
 import type { Priority } from "@/types/domain";
 
@@ -17,6 +18,8 @@ export async function GET() {
     ]);
     const client = clients[0] ?? null;
     const clientHours = operationalHours(client ? hours.filter((entry) => entry.clientId === client.id) : hours);
+    const clientInvoices = client ? invoices.filter((entry) => entry.clientId === client.id) : invoices;
+    const clientProjects = client ? projects.filter((entry) => entry.clientId === client.id) : projects;
     const week = getWeekRange();
     const month = getMonthRange();
     const latestInvoice = invoices.sort((a, b) => b.periodEnd.localeCompare(a.periodEnd))[0] ?? null;
@@ -29,6 +32,10 @@ export async function GET() {
     })[0] ?? null;
     const recentWorkEntries = workLogs.filter((entry) => !client || entry.clientId === client.id).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
     const upcomingTasks = workLogs.filter((entry) => entry.status !== "done").sort((a, b) => PRIORITY[b.priority] - PRIORITY[a.priority] || a.date.localeCompare(b.date)).slice(0, 5);
+    const invoicedStatuses = new Set(["sent", "paid"]);
+    const outstandingStatuses = new Set(["sent", "draft"]);
+    const alreadyInvoicedList = clientInvoices.filter((entry) => invoicedStatuses.has(entry.status));
+    const outstandingList = clientInvoices.filter((entry) => outstandingStatuses.has(entry.status));
     const payload: DashboardSummary = {
       workspaceName: workspace?.name ?? null,
       client,
@@ -42,6 +49,11 @@ export async function GET() {
       recentWorkEntries,
       recentNotes: knowledge.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5),
       upcomingTasks,
+      readyToInvoice: { hours: sumHours(unbilled), amount: sumBillableAmount(unbilled) },
+      alreadyInvoiced: { count: alreadyInvoicedList.length, amount: roundCurrency(alreadyInvoicedList.reduce((sum, entry) => sum + entry.totalAmount, 0)) },
+      outstanding: { count: outstandingList.length, amount: roundCurrency(outstandingList.reduce((sum, entry) => sum + entry.totalAmount, 0)) },
+      recentInvoices: [...clientInvoices].sort((a, b) => (b.invoiceDate ?? b.periodEnd).localeCompare(a.invoiceDate ?? a.periodEnd)).slice(0, 5),
+      recentProjects: [...clientProjects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5),
     };
     return NextResponse.json(payload, { headers: NO_STORE_HEADERS });
   } catch (error) { return dataErrorResponse(error); }

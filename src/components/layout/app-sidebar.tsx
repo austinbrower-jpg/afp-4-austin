@@ -51,8 +51,8 @@ export function AppSidebar() {
             <Briefcase className="size-4" />
           </div>
           <div className="flex flex-col leading-none group-data-[collapsible=icon]:hidden">
-            <span className="text-sm font-semibold">AFP Workspace</span>
-            <span className="text-xs text-muted-foreground">Contractor tools</span>
+            <span className="text-sm font-semibold">Battle Bound Branding</span>
+            <span className="text-xs text-muted-foreground">Client Reporting Portal</span>
           </div>
         </div>
       </SidebarHeader>

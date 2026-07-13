@@ -14,7 +14,7 @@ export function proxy(request: NextRequest) {
     status: 401,
     headers: {
       "Cache-Control": "no-store",
-      "WWW-Authenticate": 'Basic realm="AFP Workspace", charset="UTF-8"',
+      "WWW-Authenticate": 'Basic realm="Battle Bound Branding Client Reporting Portal", charset="UTF-8"',
     },
   });
 }

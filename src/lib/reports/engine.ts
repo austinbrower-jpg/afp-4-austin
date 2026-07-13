@@ -507,7 +507,10 @@ export function composeReport(
       email: settings.email.trim(),
       phone: settings.phone.trim(),
       address: settings.address.trim(),
+      website: settings.website.trim(),
       logoPath: settings.logoPath.trim(),
+      invoiceFooter: settings.invoiceFooter.trim(),
+      paymentInstructions: settings.paymentInstructions.trim(),
     },
     invoice: {
       number: input.invoiceNumber.trim(),

@@ -12,15 +12,24 @@ export async function GET(_request: NextRequest, { params }: Context) {
   try {
     const provider = await getDataProvider();
     const { id } = await params;
-    const [project, hours, workLogs, knowledge] = await Promise.all([
-      provider.projects.findById(id), provider.hours.list(), provider.workLogs.list(), provider.knowledge.list(),
+    const [project, hours, workLogs, knowledge, invoices] = await Promise.all([
+      provider.projects.findById(id), provider.hours.list(), provider.workLogs.list(), provider.knowledge.list(), provider.invoices.list(),
     ]);
     if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
+    const projectHours = hours.filter((entry) => entry.projectId === id);
+    const projectWorkLogs = workLogs.filter((entry) => entry.projectId === id);
+    const projectHoursIds = new Set(projectHours.map((entry) => entry.id));
+    const projectWorkLogIds = new Set(projectWorkLogs.map((entry) => entry.id));
+    const projectInvoices = invoices.filter((invoice) =>
+      invoice.hoursEntryIds.some((hoursId) => projectHoursIds.has(hoursId)) ||
+      (invoice.workDoneIds ?? []).some((workLogId) => projectWorkLogIds.has(workLogId)),
+    );
     return NextResponse.json({
       project,
-      hours: hours.filter((entry) => entry.projectId === id),
-      workLogs: workLogs.filter((entry) => entry.projectId === id),
+      hours: projectHours,
+      workLogs: projectWorkLogs,
       knowledge: knowledge.filter((entry) => entry.projectId === id),
+      invoices: projectInvoices,
     }, { headers: NO_STORE_HEADERS });
   } catch (error) { return dataErrorResponse(error); }
 }

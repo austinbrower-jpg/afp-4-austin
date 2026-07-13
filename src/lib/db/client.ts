@@ -11,6 +11,19 @@ declare global {
   var __afpDb: Database.Database | undefined;
 }
 
+/**
+ * CREATE TABLE IF NOT EXISTS is a no-op against a table that already exists
+ * on disk, so additive schema changes need an explicit column migration -
+ * otherwise inserts referencing a new column fail against pre-existing local
+ * database files.
+ */
+function addMissingColumns(db: Database.Database, table: string, columns: Record<string, string>): void {
+  const existing = new Set((db.pragma(`table_info(${table})`) as Array<{ name: string }>).map((c) => c.name));
+  for (const [column, definition] of Object.entries(columns)) {
+    if (!existing.has(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
 function createConnection(): Database.Database {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -19,6 +32,11 @@ function createConnection(): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(SCHEMA_SQL);
+  addMissingColumns(db, "report_settings", {
+    website: "TEXT NOT NULL DEFAULT ''",
+    invoice_footer: "TEXT NOT NULL DEFAULT ''",
+    payment_instructions: "TEXT NOT NULL DEFAULT ''",
+  });
   return db;
 }
 
