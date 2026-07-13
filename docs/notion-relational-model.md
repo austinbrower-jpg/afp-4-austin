@@ -140,3 +140,7 @@ Expected totals (operational): 987 billable min, 120 non-billable min, $493.50
 | `src/lib/invoices/invoice-save-apply.ts` | Targeted Notion writes (gated) |
 | `src/lib/invoices/invoice-saved-view.ts` | Immutable saved-invoice preview |
 | `src/lib/notion/relation-backfill/preview.ts` | July 8–10 backfill preview |
+
+## Phase 15 adapter cleanup
+
+Shared Notion adapter helpers now centralize relation ID extraction, invoice status normalization, date conversion, client lookup by name, and invoice serialization. The goal is to keep future Notion provider changes additive and reduce duplicated mapping logic without changing live databases.

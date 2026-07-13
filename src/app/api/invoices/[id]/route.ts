@@ -4,6 +4,7 @@ import { dataErrorResponse, NO_STORE_HEADERS } from "@/lib/data/route-utils";
 import { composeSavedInvoiceView } from "@/lib/invoices/invoice-saved-view";
 import { buildStoredDatasetForSave } from "@/lib/invoices/invoice-save-data";
 import { getReportSettings } from "@/lib/reports/settings";
+import { buildInvoiceTimeline } from "@/lib/invoices/timeline";
 import type { InvoiceDetailResponse, WorkPerformedRow } from "@/types/api";
 import type { InvoiceReport, InvoiceStatus } from "@/types/domain";
 
@@ -37,6 +38,7 @@ async function augment(invoice: InvoiceReport, provider: Awaited<ReturnType<type
     liveDriftWarnings: savedView.liveDriftWarnings,
     immutableTotals: savedView.immutableTotals,
     notionPageUrl: invoice.notionUrl ?? (invoice.notionPageId ? `https://www.notion.so/${invoice.notionPageId.replace(/-/g, "")}` : null),
+    timeline: buildInvoiceTimeline(invoice),
   };
 }
 export async function GET(_request: NextRequest, { params }: Context) {
