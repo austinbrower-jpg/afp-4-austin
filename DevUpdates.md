@@ -1444,3 +1444,72 @@ Phase 11 on branch `feat/notion-relations-refactor` off `main` (`75328d3`). Impl
 - Review and approve additive schema proposal before any live `dataSources.update`.
 - Run relation backfill preview against live July 8–10 rows and approve proposed writes separately.
 - Approve enabling explicit invoice save mutations after schema exists.
+
+---
+
+## 2026-07-13 — Phase 12A: relational schema apply tooling (blocked on credentials, Cloud Agent)
+
+### Preconditions
+
+- **Phase 11 PR #8 is not merged into `main`.** `origin/main` remains at `75328d3`; Phase 11 code lives on `feat/notion-relations-refactor` (`3a1b9bd`).
+- Branch **`feat/notion-relational-schema`** created from `feat/notion-relations-refactor`.
+- Working tree had Phase 11 code; Phase 12A adds schema-apply modules only (uncommitted per user instruction).
+
+### Built (not yet run against live Notion)
+
+- `src/lib/notion/migration/relational-schema-setup.ts` — inspect missing Phase 11 properties, build additive `dataSources.update` patches (including `dual_property` reciprocals), apply one property at a time with stop-on-first-error, verify select options and relation metadata read-only.
+- `scripts/apply-relational-schema.ts` — standalone runner (refuses when `NOTION_SYNC_ENABLED=true`; schema-only; then runs relational verifier + July 8–10 backfill preview using read-only row queries).
+- `src/lib/notion/migration/relational-schema-setup.test.ts` — unit tests for skip-existing behaviour (e.g. Invoice Reports `Status` left untouched when present with legacy options).
+
+### Live apply status
+
+**Not executed.** This cloud environment has no `.env.local` and no `NOTION_API_KEY`. Notion MCP is `needsAuth`. Vercel env pull failed (CLI error). Production health confirms Notion mode is configured on Vercel, but credentials are not available here.
+
+To apply when approved locally:
+
+```bash
+# .env.local must include NOTION_API_KEY + six NOTION_DATABASE_* ids, NOTION_SYNC_ENABLED=false
+node --env-file=.env.local node_modules/.bin/tsx scripts/apply-relational-schema.ts
+```
+
+### Safety confirmations
+
+- No row writes in new code paths (schema-only `dataSources.update`).
+- No backfill applied.
+- `NOTION_SYNC_ENABLED` not enabled.
+- No commit or push performed.
+
+### Verification (local, without live Notion)
+
+- `npm run lint` — pass.
+- `npm run typecheck` — pass.
+- `npm test` — pass (260/260).
+- `npm run build` — pass.
+- Canonical July 8–10 preview tests still assert **987 billable min**, **120 non-billable min**, **$493.50**, `writesPerformed: false`, deterministic previews.
+
+### Remaining to complete Phase 12A live
+
+1. Merge Phase 11 PR #8 (or rebase `feat/notion-relational-schema` onto merged `main`).
+2. Provide `NOTION_API_KEY` + database ids to the apply script environment.
+3. Run `scripts/apply-relational-schema.ts` and capture BEFORE/AFTER inspection, reciprocal names, verifier output, and live backfill preview JSON.
+4. User approval before commit/push.
+
+---
+
+## 2026-07-13 — Phase 12A: GitHub workflow (Cloud Agent)
+
+### Phase 11 merged
+
+- PR #8 merged into `main` at `745575f` (merge commit).
+- Remote `feat/notion-relations-refactor` deleted after merge.
+
+### Phase 12A branch rebased
+
+- `feat/notion-relational-schema` recreated from updated `main` (`745575f`).
+- Stashed Phase 12A WIP restored; diff contains only schema setup tooling, tests, apply script, and this DevUpdates append.
+
+### Commit / PR status
+
+- Phase 12A tooling committed and opened as PR against `main`.
+- Live schema apply **not executed** in this environment (no credentials).
+- `NOTION_SYNC_ENABLED` remains `false`.
