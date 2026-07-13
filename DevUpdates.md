@@ -1513,3 +1513,52 @@ node --env-file=.env.local node_modules/.bin/tsx scripts/apply-relational-schema
 - Phase 12A tooling committed and opened as PR against `main`.
 - Live schema apply **not executed** in this environment (no credentials).
 - `NOTION_SYNC_ENABLED` remains `false`.
+
+---
+
+## 2026-07-13 — Phase 12B: live relation backfill applied (Cloud Agent, not committed)
+
+### Tooling added (local only — awaiting approval)
+
+- `src/lib/notion/relation-backfill/live-fetch.ts` — read-only July 8–10 + project/client fetch helpers.
+- `src/lib/notion/migration/relation-backfill-apply.ts` — preflight, ordered `pages.update` apply plan, post-apply verification.
+- `src/lib/notion/migration/relation-backfill-apply.test.ts` — unit tests for plan ordering and idempotency.
+- `scripts/apply-relation-backfill.ts` — standalone runner (`--preflight-only` supported).
+
+### Live apply executed
+
+- **38** targeted `pages.update` calls across **14** Notion pages (3 projects + 6 hours + 3 work-done + relation reciprocals via dual_property).
+- **0** failures; idempotent re-run applied **0** additional updates.
+- `NOTION_SYNC_ENABLED=false`; general sync engine not used; no invoice metadata saved; no rows created/deleted/archived; narrative/times/rates unchanged.
+
+### Preflight notes
+
+- Live migration keys use `afp-history-v2-*` format (matched by date+time, not canonical source key strings).
+- July 10 work-done matched by date (live title differs from preview label; title not modified).
+- Projects **AFP Invoice Workspace** and **Digital Systems Audit & Process Documentation** not found in live Notion — Client relation skipped (warning only).
+- Superseded row: no Related Work Done relation; Billing Status set to **Superseded**.
+
+### Post-apply verification
+
+| Check | Result |
+|---|---|
+| Session IDs | 6/6 assigned uniquely |
+| Work Log IDs | 3/3 assigned uniquely |
+| Client relations | Hours, Work Done, 3 Projects → Anytime Fuel Pros |
+| Hours ↔ Work Done | Jul 8 (3+1 reciprocal), Jul 9, Jul 10 |
+| Billing Status | Reviewed / Ready to Invoice / Superseded per plan |
+| Approval Status | Approved on all 3 work logs |
+| Totals | 987 billable min, 120 non-billable min, $493.50 |
+| ambiguousMatches | 0 |
+| Report Builder (canonical) | Simple $493.50, Detailed 4 sessions, Work Log Jul 8–10 |
+
+### Verification suite (local)
+
+- `npm run lint` — pass (after unused-var fix)
+- `npm run typecheck` — pass
+- `npm test` — 265/265 pass
+- `npm run build` — pass
+
+### Not committed
+
+Awaiting user approval before commit/push/merge/deploy.
