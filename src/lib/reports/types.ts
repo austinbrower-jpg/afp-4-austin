@@ -109,6 +109,8 @@ export interface ReportBuilderInput {
   draftDescriptions: Record<string, string>;
   /** When viewing an existing invoice, allow its already-invoiced hours */
   viewingInvoiceId?: string | null;
+  /** Saved invoice preview: use included relations only; skip new-invoice eligibility rules */
+  savedInvoiceView?: boolean;
 }
 
 export interface ReportExcludedRecord {

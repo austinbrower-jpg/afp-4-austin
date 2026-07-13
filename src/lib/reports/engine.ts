@@ -258,7 +258,9 @@ export function composeReport(
       }),
     );
   }
-  const privacy = filterWorkRecordsForPrivacy(workCandidates, input.type);
+  const privacy = input.savedInvoiceView
+    ? { included: [...workCandidates], excluded: [] as ReportExcludedRecord[] }
+    : filterWorkRecordsForPrivacy(workCandidates, input.type);
   excludedRecords.push(...privacy.excluded);
   const visibleWork = [...privacy.included].sort(
     (a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id),
@@ -292,6 +294,7 @@ export function composeReport(
       continue;
     }
     if (
+      !input.savedInvoiceView &&
       input.type !== "work-log-report" &&
       isLockedBillingStatus(hours.billingStatus ?? null) &&
       hours.invoiceReportId !== input.viewingInvoiceId
@@ -326,7 +329,9 @@ export function composeReport(
       continue;
     }
     const reportKind = input.type === "work-log-report" ? "work-log-report" : "invoice";
-    const workRejected = matchedWork.find((work) => workInvoiceInclusionReason(work, reportKind));
+    const workRejected = input.savedInvoiceView
+      ? undefined
+      : matchedWork.find((work) => workInvoiceInclusionReason(work, reportKind));
     if (workRejected) {
       const reason = workInvoiceInclusionReason(workRejected, reportKind);
       excludedRecords.push({
