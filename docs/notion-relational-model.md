@@ -91,14 +91,18 @@ Superseded rows:
 4. Reject ambiguous fallback matches
 5. Never match date-only when multiple Work Done candidates exist on the same date
 
-## Invoice locking (read-only architecture)
+## Invoice locking (Phase 13)
 
-Implemented in `src/lib/invoices/invoice-locking.ts`:
+Implemented across `src/lib/invoices/invoice-locking.ts`, `invoice-save.ts`, and `invoice-save-apply.ts`:
 
-- Invoice relations to Client, Hours, and Work Done are planned before explicit save
-- Hours Billing Status becomes **Invoiced** only during explicit save (not preview/export)
-- Hours already tied to another non-cancelled invoice are refused
-- Partial failures are reported per row; retries are idempotent
+- Preview/export remain read-only; explicit save is a separate gated action
+- Invoice relations to Client, Hours, and Work Done are planned at preflight
+- Hours Billing Status becomes **Invoiced** only during explicit save
+- Hours already tied to another non-void invoice are refused
+- Partial failures stop immediately; retries are idempotent by invoice number
+- Void invoices do not automatically unlock Hours (manual unlock is future work)
+
+See [invoice-locking.md](./invoice-locking.md).
 
 ## Backfill preview
 
@@ -131,5 +135,8 @@ Expected totals (operational): 987 billable min, 120 non-billable min, $493.50
 | `src/lib/notion/identity/work-log-id.ts` | Work Log ID helpers |
 | `src/lib/notion/quarantine.ts` | Superseded detection |
 | `src/lib/reports/relation-matching.ts` | Explicit matching order |
-| `src/lib/invoices/invoice-locking.ts` | Invoice lock plan (no live writes) |
+| `src/lib/invoices/invoice-locking.ts` | Invoice lock plan |
+| `src/lib/invoices/invoice-save.ts` | Preflight, gating, confirmation |
+| `src/lib/invoices/invoice-save-apply.ts` | Targeted Notion writes (gated) |
+| `src/lib/invoices/invoice-saved-view.ts` | Immutable saved-invoice preview |
 | `src/lib/notion/relation-backfill/preview.ts` | July 8–10 backfill preview |

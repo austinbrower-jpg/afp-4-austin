@@ -210,6 +210,40 @@ export function invoiceToNotionProperties(i: InvoiceReport) {
     [s.totalAmount]: number(i.totalAmount),
     [s.status]: select(i.status),
     [s.summary]: richText(i.summary),
+    ...(i.invoiceDate ? { [s.invoiceDate]: date(i.invoiceDate) } : {}),
+    ...(i.dueDate ? { [s.dueDate]: date(i.dueDate) } : {}),
+    ...(i.paymentTerms ? { [s.paymentTerms]: richText(i.paymentTerms) } : {}),
+    ...(i.pdfUrl ? { [s.pdfUrl]: url(i.pdfUrl) } : {}),
+  };
+}
+
+export interface InvoiceRelationalWrite {
+  clientId?: string | null;
+  includedHoursIds?: string[];
+  includedWorkDoneIds?: string[];
+}
+
+export function invoiceRelationalProperties(input: InvoiceRelationalWrite): Record<string, unknown> {
+  const s = NOTION_SCHEMA.invoice;
+  const props: Record<string, unknown> = {};
+  if (input.clientId) props[s.client] = relation([input.clientId]);
+  if (input.includedHoursIds) props[s.includedHours] = relation(input.includedHoursIds);
+  if (input.includedWorkDoneIds) props[s.includedWorkDone] = relation(input.includedWorkDoneIds);
+  return props;
+}
+
+export function hoursInvoiceLockProperties(invoicePageId: string): Record<string, unknown> {
+  const s = NOTION_SCHEMA.hours;
+  return {
+    [s.billingStatus]: select("Invoiced"),
+    [s.invoiceReport]: relation([invoicePageId]),
+  };
+}
+
+export function workInvoiceRelationProperties(invoicePageId: string): Record<string, unknown> {
+  const s = NOTION_SCHEMA.worklog;
+  return {
+    [s.invoiceReport]: relation([invoicePageId]),
   };
 }
 

@@ -1562,3 +1562,71 @@ node --env-file=.env.local node_modules/.bin/tsx scripts/apply-relational-schema
 ### Not committed
 
 Awaiting user approval before commit/push/merge/deploy.
+
+---
+
+## 2026-07-13 — Phase 13: Invoice locking, explicit save, duplicate billing prevention (Cloud Agent, not committed)
+
+### Scope
+
+Read-only preflight and UI first. **No live invoice save**, **no Hours/Work Done mutations**, **no commit/push/merge/deploy** until user approves final report.
+
+### Added
+
+- `src/lib/invoices/invoice-status.ts` — legacy Status mapping (`draft`, `sent`, `paid`, `void`)
+- `src/lib/invoices/invoice-save.ts` — preflight, gating, confirmation phrase `SAVE AFP INVOICE`
+- `src/lib/invoices/invoice-save-apply.ts` — targeted `pages.create` / `pages.update` (gated by `NOTION_INVOICE_SAVE_ENABLED`)
+- `src/lib/invoices/invoice-save-data.ts` — Notion dataset builder for save preflight
+- `src/lib/invoices/invoice-saved-view.ts` — immutable saved-invoice preview from Included relations
+- `src/app/api/invoices/save-preflight/route.ts` — read-only POST preflight
+- `src/app/api/invoices/save/route.ts` — gated POST save
+- `src/app/api/invoices/[id]/preview/route.ts` — read-only saved-invoice preview
+- `src/features/reports/components/invoice-save-panel.tsx` — preflight UI, confirmation, diagnostics
+- `docs/invoice-locking.md` — explicit save flow, locking, duplicate prevention, recovery
+
+### Updated
+
+- Report Builder — separate **Save Invoice to Notion** panel (preview/export remain read-only)
+- Invoice list/detail — Session IDs, Work Log IDs, relation counts, Notion link, immutable totals, drift warnings
+- `invoice-locking.ts` — `void` treated as non-blocking for duplicate billing
+- `mappers.ts` — relational write helpers for invoice save
+- `.env.example` — `NOTION_INVOICE_SAVE_ENABLED=false`
+
+### Gating
+
+| Check | Default |
+|---|---|
+| `NOTION_SYNC_ENABLED` | `false` (save refuses if true) |
+| `NOTION_INVOICE_SAVE_ENABLED` | `false` (no live save until approved) |
+
+### Verification suite (local)
+
+- `npm run lint` — pass
+- `npm run typecheck` — pass
+- `npm test` — 279/279 pass
+- `npm run build` — pass
+- `git diff --check` — pass
+
+### Live read-only preflight (July 8–10, Notion)
+
+| Check | Result |
+|---|---|
+| `writesPerformed` | `false` |
+| `ready` | `true` |
+| Total | **$493.50** |
+| Billable hours | **16.45** (987 min) |
+| Included Hours | **4** billable sessions |
+| Included Work Done | **3** rows |
+| Duplicate conflicts | **0** |
+| Match source | Explicit relations |
+| Superseded row | Excluded (not in included Hours) |
+| `saveEnabled` | `false` |
+
+### Not performed
+
+- Live invoice save to Notion
+- Hours Billing Status mutations
+- Work Done Invoice Report relation mutations
+- Commit, push, merge, deploy
+
+Awaiting user approval of read-only preflight report before any live write or git push.

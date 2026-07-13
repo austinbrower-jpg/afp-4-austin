@@ -31,7 +31,7 @@ For live read-only verification, fill in the seven Notion variables and run `APP
 - Live page/API reads query Notion directly and never mix mock rows.
 - Clients and Knowledge are read-only in Notion mode.
 - Dedicated Hours, Work Done, and Projects POST/PATCH routes perform schema validation and targeted writes.
-- Invoice metadata can be saved only after a report preview has been exported and explicitly confirmed.
+- Invoice metadata can be saved only through the explicit **Save Invoice to Notion** flow in Report Builder after read-only preflight and typed confirmation. Live save requires `NOTION_INVOICE_SAVE_ENABLED=true`. See [invoice-locking.md](docs/invoice-locking.md).
 - Notion deletes/archives are not supported.
 
 The legacy general sync engine is not used. `NOTION_SYNC_ENABLED` must remain `false`; setting it to `true` fails runtime validation. Historical import endpoints remain separate and are never called during normal operation.
