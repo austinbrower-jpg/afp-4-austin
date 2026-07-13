@@ -101,8 +101,12 @@ export function WorkDoneList({ initialWorkLogs, projects, dataSourceMode }: Work
             <TableHeader>
               <TableRow>
                 <TableHead>Title</TableHead>
+                <TableHead>Work Log ID</TableHead>
                 <TableHead>Project</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead>Approval</TableHead>
+                <TableHead>Related Hours</TableHead>
+                <TableHead>Invoice</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Priority</TableHead>
               </TableRow>
@@ -122,11 +126,23 @@ export function WorkDoneList({ initialWorkLogs, projects, dataSourceMode }: Work
                         </p>
                       )}
                     </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {log.workLogId ?? "—"}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {project ? project.name : "—"}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {formatDate(log.date)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {log.approvalStatus?.replace(/-/g, " ") ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground tabular-nums">
+                      {log.relatedHoursIds.length}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {log.invoiceReportId ? "Linked" : "—"}
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={log.status} />

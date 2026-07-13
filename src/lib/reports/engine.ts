@@ -12,6 +12,14 @@ import type {
   ReportType,
   ReportWorkRecord,
 } from "./types";
+import { isSupersededHours, supersededDiagnosticReason } from "@/lib/notion/quarantine";
+import { isLockedBillingStatus } from "@/lib/invoices/invoice-locking";
+import {
+  matchHoursToWork,
+  MATCH_SOURCE_LABELS,
+  workInvoiceInclusionReason,
+  type MatchSource,
+} from "./relation-matching";
 
 export function roundCurrency(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -120,22 +128,84 @@ function projectName(projectId: string | null, projects: readonly ReportProject[
   return projects.find((project) => project.id === projectId)?.name ?? "Missing project";
 }
 
-function isWorkRelatedToHours(work: ReportWorkRecord, hours: ReportHoursRecord): boolean {
+function isWorkRelatedToHours(
+  work: ReportWorkRecord,
+  hours: ReportHoursRecord,
+  matchSource?: MatchSource,
+): boolean {
+  if (matchSource === "explicit" || matchSource === "reciprocal" || matchSource === "legacy-fallback") {
+    const result = matchHoursToWork(
+      {
+        id: hours.id,
+        date: hours.date,
+        projectId: hours.projectId,
+        relatedWorkLogId: hours.relatedWorkLogId,
+        relatedWorkDoneIds: hours.relatedWorkDoneIds,
+      },
+      [{
+        id: work.id,
+        date: work.date,
+        projectId: work.projectId,
+        relatedHoursIds: work.relatedHoursIds,
+        clientVisible: work.clientVisible,
+        includeInInvoice: work.includeInInvoice,
+        includeInWorkReport: work.includeInWorkReport,
+        approvalStatus: work.approvalStatus,
+        status: work.status,
+      }],
+    );
+    return result.some((m) => m.workId === work.id && m.source === matchSource);
+  }
   if (hours.relatedWorkLogId === work.id || work.relatedHoursIds.includes(hours.id)) return true;
   return work.date === hours.date && work.projectId === hours.projectId;
+}
+
+function resolveHoursWorkMatch(
+  hours: ReportHoursRecord,
+  visibleWork: readonly ReportWorkRecord[],
+): { work: ReportWorkRecord[]; source: MatchSource } {
+  const matches = matchHoursToWork(
+    {
+      id: hours.id,
+      date: hours.date,
+      projectId: hours.projectId,
+      relatedWorkLogId: hours.relatedWorkLogId,
+      relatedWorkDoneIds: hours.relatedWorkDoneIds,
+    },
+    visibleWork.map((work) => ({
+      id: work.id,
+      date: work.date,
+      projectId: work.projectId,
+      relatedHoursIds: work.relatedHoursIds,
+      clientVisible: work.clientVisible,
+      includeInInvoice: work.includeInInvoice,
+      includeInWorkReport: work.includeInWorkReport,
+      approvalStatus: work.approvalStatus,
+      status: work.status,
+    })),
+  );
+  const unambiguous = matches.find(
+    (m) => m.workId && (m.source === "explicit" || m.source === "reciprocal" || m.source === "legacy-fallback"),
+  );
+  if (unambiguous) {
+    const work = visibleWork.find((w) => w.id === unambiguous.workId);
+    return { work: work ? [work] : [], source: unambiguous.source };
+  }
+  if (matches.some((m) => m.source === "ambiguous")) {
+    return { work: [], source: "ambiguous" };
+  }
+  return { work: [], source: "missing" };
 }
 
 function descriptionForHours(
   hours: ReportHoursRecord,
   visibleWork: readonly ReportWorkRecord[],
   drafts: Readonly<Record<string, string>>,
+  matchedWork: readonly ReportWorkRecord[],
 ): string {
-  const explicit = visibleWork.filter(
-    (work) => hours.relatedWorkLogId === work.id || work.relatedHoursIds.includes(hours.id),
-  );
-  const related = explicit.length > 0
-    ? explicit
-    : visibleWork.filter((work) => work.date === hours.date && work.projectId === hours.projectId);
+  const related = matchedWork.length > 0
+    ? matchedWork
+    : visibleWork.filter((work) => isWorkRelatedToHours(work, hours));
   return [...new Set(related.map((work) => (drafts[work.id] ?? work.detailedWorkDescription).trim()).filter(Boolean))]
     .join("; ");
 }
@@ -202,6 +272,16 @@ export function composeReport(
   for (const hours of [...hoursCandidates].sort(
     (a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime) || a.id.localeCompare(b.id),
   )) {
+    if (isSupersededHours({ migrationKey: hours.migrationKey, billingStatus: hours.billingStatus })) {
+      excludedRecords.push({
+        id: hours.id,
+        kind: "hours",
+        title: `${hours.date} ${hours.startTime}-${hours.endTime}`,
+        reason: supersededDiagnosticReason({ migrationKey: hours.migrationKey, billingStatus: hours.billingStatus }) ?? "Superseded historical record",
+        matchSource: "Superseded",
+      });
+      continue;
+    }
     if (input.type !== "work-log-report" && !hours.billable) {
       excludedRecords.push({
         id: hours.id,
@@ -211,17 +291,54 @@ export function composeReport(
       });
       continue;
     }
-    const relatedVisibleWork = visibleWork.filter((work) => isWorkRelatedToHours(work, hours));
-    if (relatedVisibleWork.length === 0) {
+    if (
+      input.type !== "work-log-report" &&
+      isLockedBillingStatus(hours.billingStatus ?? null) &&
+      hours.invoiceReportId !== input.viewingInvoiceId
+    ) {
+      excludedRecords.push({
+        id: hours.id,
+        kind: "hours",
+        title: `${hours.date} ${hours.startTime}-${hours.endTime}`,
+        reason: `Hours already marked ${hours.billingStatus}`,
+      });
+      continue;
+    }
+    const { work: matchedWork, source: matchSource } = resolveHoursWorkMatch(hours, visibleWork);
+    if (matchSource === "ambiguous") {
+      excludedRecords.push({
+        id: hours.id,
+        kind: "hours",
+        title: `${hours.date} ${hours.startTime}-${hours.endTime}`,
+        reason: "Ambiguous Work Done match — multiple candidates",
+        matchSource: MATCH_SOURCE_LABELS.ambiguous,
+      });
+      continue;
+    }
+    if (matchedWork.length === 0) {
       excludedRecords.push({
         id: hours.id,
         kind: "hours",
         title: `${hours.date} ${hours.startTime}-${hours.endTime}`,
         reason: "No related client-visible Work Done record is approved for this report",
+        matchSource: MATCH_SOURCE_LABELS.missing,
       });
       continue;
     }
-    const description = descriptionForHours(hours, relatedVisibleWork, input.draftDescriptions);
+    const reportKind = input.type === "work-log-report" ? "work-log-report" : "invoice";
+    const workRejected = matchedWork.find((work) => workInvoiceInclusionReason(work, reportKind));
+    if (workRejected) {
+      const reason = workInvoiceInclusionReason(workRejected, reportKind);
+      excludedRecords.push({
+        id: hours.id,
+        kind: "hours",
+        title: `${hours.date} ${hours.startTime}-${hours.endTime}`,
+        reason: reason ?? "Linked Work Done failed inclusion checks",
+        matchSource: MATCH_SOURCE_LABELS[matchSource],
+      });
+      continue;
+    }
+    const description = descriptionForHours(hours, visibleWork, input.draftDescriptions, matchedWork);
     if (!description) {
       excludedRecords.push({
         id: hours.id,

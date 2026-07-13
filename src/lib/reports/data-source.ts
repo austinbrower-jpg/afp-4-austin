@@ -10,6 +10,7 @@ import {
   SOURCE_PAGES,
   STANDARD_HOURLY_RATE,
 } from "@/lib/notion/migration/source-data";
+import { buildJuly810ReportDataset } from "@/lib/notion/relation-backfill/july8-10-dataset";
 import type { KnowledgePage, WorkLog } from "@/types/domain";
 import type {
   ReportDataSource,
@@ -70,6 +71,10 @@ function historicalFollowUps(id: string): string[] {
   return id === "wl-2026-07-08"
     ? ["Continue the website rebuild and automation documentation plan."]
     : ["Evaluate multi-page PDF support and future delete-sync behavior."];
+}
+
+function buildJuly810Dataset(): ReportDataset {
+  return buildJuly810ReportDataset();
 }
 
 function buildHistoricalDataset(): ReportDataset {
@@ -176,6 +181,7 @@ function mapWorkLog(log: WorkLog, source: ReportDataSource): ReportWorkRecord {
     testingPerformed: [],
     blockers: log.status === "blocked" && log.summary ? [log.summary] : [],
     followUpItems: log.status === "blocked" ? ["Resolve the client-visible blocker and complete verification."] : [],
+    approvalStatus: log.approvalStatus ?? (log.status === "done" ? "approved" : null),
   };
 }
 
@@ -222,6 +228,10 @@ async function buildStoredDataset(provider: AppDataProvider): Promise<ReportData
       hourlyRate: entry.hourlyRate,
       billable: entry.billable,
       relatedWorkLogId: entry.relatedWorkLogId,
+      relatedWorkDoneIds: entry.relatedWorkDoneIds,
+      migrationKey: entry.externalId,
+      billingStatus: entry.billingStatus,
+      invoiceReportId: entry.invoiceReportId,
     })),
     workRecords: workLogs.map((log) => mapWorkLog(log, source)),
     knowledgeRecords: knowledge.map(mapKnowledge),
@@ -237,11 +247,9 @@ export async function getReportBuilderData(): Promise<ReportBuilderData> {
   const provider = await getDataProvider();
   const current = await buildStoredDataset(provider);
   const historical = buildHistoricalDataset();
+  const july810 = buildJuly810Dataset();
   return {
-    datasets: [current, historical],
-    // Production must open on the live provider even when its databases are
-    // empty. The historical reconciliation stays available as an explicit,
-    // isolated preview dataset and is never a fallback for live data.
+    datasets: [current, historical, july810],
     recommendedSource: current.source,
   };
 }

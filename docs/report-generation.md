@@ -52,6 +52,20 @@ Hours require a related approved Work Done record and a non-empty client-visible
 
 Local mock compatibility is intentionally narrow: the existing domain already defines `invoiceDescription` as client-facing, so a populated local/mock value is projected as the visibility opt-in. Cached Notion rows do not receive that fallback; until the proposed fields exist and are mapped, missing flags remain excluded.
 
+**Superseded** Hours (migration key prefix `afp-history-v2-superseded-` or Billing Status = Superseded) remain visible in the Hours list but are excluded from dashboard totals, invoices, and work reports.
+
+## Explicit relation matching (Phase 11)
+
+Report Builder resolves Hours → Work Done in this order:
+
+1. **Explicit** — Hours `Related Work Done` relation
+2. **Reciprocal** — Work Done `Related Hours` pointing back
+3. **Legacy fallback** — same date + same project (single candidate only)
+4. **Ambiguous** — multiple candidates → excluded
+5. **Missing** — no safe match
+
+Each excluded Hours row shows the match source label and precise include/exclude reason in the builder panel.
+
 ## Exact-minute billing
 
 Billing never uses persisted `totalHours` rounding:
@@ -62,7 +76,7 @@ lineAmount = roundToCents(exactMinutes / 60 × hourlyRate)
 invoiceTotal = sum(lineAmount)
 ```
 
-Overnight sessions are supported. The approved historical preview produces 622 billable minutes (10h 22m) and exactly **$311.00**.
+Overnight sessions are supported. The corrected July 8–10 operational dataset produces **987 billable minutes**, **120 non-billable minutes**, and exactly **$493.50** at $30/hr (quarantine row excluded).
 
 ## Data-source selection
 
@@ -72,6 +86,7 @@ Overnight sessions are supported. The approved historical preview produces 622 b
 |---|---|
 | Notion data | Current Clients, Projects, Hours, Work Done, Knowledge, and Invoice Reports queried directly from Notion |
 | Historical preview data | Approved deterministic July 8–9 source transcription |
+| July 8–10 corrected dataset | Operational July 8–10 preview with explicit relations and quarantine row |
 | Local mock data | SQLite development rows, available only when `APP_DATA_SOURCE=mock` |
 
 Notion mode never loads or mixes local mock rows. The deterministic historical preview remains separately selectable for reconciliation and is never imported. Empty sources and periods render a useful empty state.
@@ -114,3 +129,5 @@ Mock mode stores contractor name, business name, email, phone, address, default 
 | Source Page | URL |
 
 The exact Phase 8 additive preview is recorded in `src/lib/notion/schema-requirements.ts`, shown in Settings, and returned with live read-only verification by `GET /api/notion/schema-preview`. Related Hours remains deferred. No schema update API is implemented or called.
+
+Phase 11 adds a fuller relational proposal in `src/lib/notion/relational-schema-proposal.ts` (Session ID, Client/Invoice relations, Billing Status, Approval Status, etc.). See [notion-relational-model.md](./notion-relational-model.md). `GET /api/notion/relation-backfill-preview` returns a read-only July 8–10 backfill preview with no writes.

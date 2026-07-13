@@ -17,6 +17,7 @@ import {
   clientFromNotionProperties,
   extractPlainText,
   extractRelationIds,
+  extractSelect,
   hoursFromNotionProperties,
   invoiceFromNotionProperties,
   knowledgeFromNotionProperties,
@@ -124,8 +125,12 @@ export function mapNotionHours(page: NotionPageLike, context: MappingContext): H
   const warnings: string[] = [];
   const parsed = hoursFromNotionProperties(page.properties);
   const projectId = extractRelationIds(page.properties[NOTION_SCHEMA.hours.project])[0] ?? null;
+  const relatedWorkDoneIds = extractRelationIds(page.properties[NOTION_SCHEMA.hours.relatedWorkDone]);
   const startTime = requiredText(parsed.startTime ?? "", "Start Time", "00:00", warnings);
   const endTime = requiredText(parsed.endTime ?? "", "End Time", startTime, warnings);
+  const migrationKey = extractPlainText(page.properties[NOTION_SCHEMA.hours.migrationKey]) || null;
+  const sessionId = extractPlainText(page.properties[NOTION_SCHEMA.hours.sessionId]) || parsed.sessionId || null;
+  const billingSelect = extractSelect(page.properties[NOTION_SCHEMA.hours.billingStatus]);
   return {
     ...common(page, context, warnings),
     workspaceId: context.workspaceId ?? WORKSPACE_ID,
@@ -139,10 +144,14 @@ export function mapNotionHours(page: NotionPageLike, context: MappingContext): H
     hourlyRate: Math.max(0, parsed.hourlyRate ?? 0),
     billable: parsed.billable === true,
     location: parsed.location || "",
-    relatedWorkLogId: null,
+    relatedWorkLogId: relatedWorkDoneIds[0] ?? parsed.relatedWorkLogId ?? null,
+    relatedWorkDoneIds,
     notes: parsed.notes || "",
     source: "manual",
-    externalId: extractPlainText(page.properties[NOTION_SCHEMA.hours.migrationKey]) || null,
+    externalId: migrationKey,
+    sessionId,
+    billingStatus: parsed.billingStatus ?? (billingSelect?.toLowerCase() === "superseded" ? "superseded" : null),
+    invoiceReportId: extractRelationIds(page.properties[NOTION_SCHEMA.hours.invoiceReport])[0] ?? parsed.invoiceReportId ?? null,
   };
 }
 
@@ -172,6 +181,9 @@ export function mapNotionWorkLog(page: NotionPageLike, context: MappingContext):
     includeInInvoice: parsed.includeInInvoice === true,
     includeInWorkReport: parsed.includeInWorkReport === true,
     evidenceLinks: parsed.evidenceLinks ?? [],
+    workLogId: extractPlainText(page.properties[NOTION_SCHEMA.worklog.workLogId]) || parsed.workLogId || null,
+    approvalStatus: parsed.approvalStatus ?? null,
+    invoiceReportId: extractRelationIds(page.properties[NOTION_SCHEMA.worklog.invoiceReport])[0] ?? parsed.invoiceReportId ?? null,
   };
 }
 
@@ -211,7 +223,14 @@ export function mapNotionInvoice(page: NotionPageLike, context: MappingContext):
     totalAmount: Math.max(0, parsed.totalAmount ?? 0),
     summary: parsed.summary || "",
     lineItems: [],
-    hoursEntryIds: [],
+    hoursEntryIds: parsed.hoursEntryIds ?? [],
     status: enumValue<InvoiceStatus>(parsed.status, ["draft", "sent", "paid", "void"], "draft", "Status", warnings),
+    workDoneIds: parsed.workDoneIds ?? [],
+    invoiceDate: parsed.invoiceDate ?? null,
+    dueDate: parsed.dueDate ?? null,
+    paymentTerms: parsed.paymentTerms ?? null,
+    sentDate: parsed.sentDate ?? null,
+    paidDate: parsed.paidDate ?? null,
+    pdfUrl: parsed.pdfUrl ?? null,
   };
 }

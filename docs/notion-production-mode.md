@@ -47,6 +47,18 @@ Exact existing requirements are defined in `src/lib/notion/schema-requirements.t
 
 Until required write fields are present with the expected types, targeted writes fail before calling Notion page create/update. Reads remain tolerant and surface missing-property warnings.
 
+## Phase 11 relational model (proposal only)
+
+Phase 11 designs explicit Notion relations for Hours Worked, Work Done, Invoice Reports, and Projects. The additive proposal lives in `src/lib/notion/relational-schema-proposal.ts` and is verified read-only by `GET /api/notion/schema-preview` and Settings.
+
+- **Session ID** (`AFP-YYYY-MM-DD-###`) and **Work Log ID** (`AFP-WORK-YYYY-MM-DD-###`) helpers assign stable identities without altering Migration Key values.
+- **Superseded** rows (`afp-history-v2-superseded-*` migration keys or Billing Status = Superseded) remain visible in Hours but are excluded from dashboard, invoice, and report totals.
+- **Report Builder** matches Hours to Work Done in order: explicit relation → reciprocal relation → legacy date+project fallback; ambiguous and date-only multi-candidate matches are rejected.
+- **Invoice locking** is implemented as read-only plan logic: preview/export never mutates Notion; explicit save would set Billing Status = Invoiced and link invoice relations.
+- **`GET /api/notion/relation-backfill-preview`** returns a read-only July 8–10 backfill preview. No Notion writes occur.
+
+See [notion-relational-model.md](./notion-relational-model.md).
+
 ## Local use on both Macs
 
 On the MacBook Air and Mac mini:

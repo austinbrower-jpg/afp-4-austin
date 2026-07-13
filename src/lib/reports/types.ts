@@ -25,6 +25,10 @@ export interface ReportHoursRecord {
   hourlyRate: number;
   billable: boolean;
   relatedWorkLogId: string | null;
+  relatedWorkDoneIds?: string[];
+  migrationKey?: string | null;
+  billingStatus?: string | null;
+  invoiceReportId?: string | null;
 }
 
 export interface ReportWorkRecord {
@@ -47,6 +51,7 @@ export interface ReportWorkRecord {
   testingPerformed: string[];
   blockers: string[];
   followUpItems: string[];
+  approvalStatus?: string | null;
 }
 
 export interface ReportKnowledgeRecord {
@@ -102,6 +107,8 @@ export interface ReportBuilderInput {
   notes: string;
   executiveSummary: string;
   draftDescriptions: Record<string, string>;
+  /** When viewing an existing invoice, allow its already-invoiced hours */
+  viewingInvoiceId?: string | null;
 }
 
 export interface ReportExcludedRecord {
@@ -109,6 +116,7 @@ export interface ReportExcludedRecord {
   kind: "hours" | "work-done" | "knowledge";
   title: string;
   reason: string;
+  matchSource?: string;
 }
 
 export interface ReportIncludedRecord {

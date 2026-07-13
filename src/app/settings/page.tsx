@@ -8,6 +8,7 @@ import { MigrationImportCard } from "@/features/settings/components/migration-im
 import { DesktopAppCard } from "@/features/settings/components/desktop-app-card";
 import { ReportSettingsCard } from "@/features/settings/components/report-settings-card";
 import { NotionProductionCard } from "@/features/settings/components/notion-production-card";
+import { RelationBackfillPreviewCard } from "@/features/settings/components/relation-backfill-preview-card";
 import { getRuntimeConfig } from "@/lib/data/runtime";
 
 export default async function SettingsPage() {
@@ -24,6 +25,7 @@ export default async function SettingsPage() {
         <WorkspaceClientCard readOnly={notion} />
         <ReportSettingsCard notionMode={notion} />
         {notion ? <NotionProductionCard config={config} /> : <NotionConnectionCard />}
+        {notion && <RelationBackfillPreviewCard />}
         <NotionMappingCard />
         {!notion && <MigrationPreviewCard />}
         {!notion && <MigrationImportCard />}

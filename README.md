@@ -44,7 +44,9 @@ Work Done drafts include privacy controls, invoice/detailed descriptions, intern
 
 ## Reports
 
-`/reports` generates Simple Invoice, Detailed Invoice, and Detailed Work Log Report outputs from the selected provider. In Notion mode the rows are current Notion data; source records remain immutable while preview text is edited. The approved historical preview still reconciles to $311.00.
+`/reports` generates Simple Invoice, Detailed Invoice, and Detailed Work Log Report outputs from the selected provider. In Notion mode the rows are current Notion data; source records remain immutable while preview text is edited. Report Builder supports explicit relation matching (Hours ↔ Work Done), superseded-row exclusion, and a read-only July 8–10 corrected dataset reconciling to **987 billable minutes**, **120 non-billable minutes**, and **$493.50**.
+
+Phase 11 adds a read-only relation backfill preview at `/settings/relation-backfill-preview` and documents an additive relational schema proposal (not applied live). See [docs/notion-relational-model.md](docs/notion-relational-model.md).
 
 See [docs/report-generation.md](docs/report-generation.md).
 
@@ -81,6 +83,7 @@ npm run dev
 | `/invoices` | Invoice Report metadata |
 | `/reports` | Invoice and work-report preview/export |
 | `/settings` | Runtime status, schema preview, read-only verification |
+| `/settings/relation-backfill-preview` | Read-only July 8–10 explicit relation backfill preview |
 | `/api/health` | Unauthenticated secret-safe health status |
 
 The Electron scaffold and historical migration tooling remain available for local development. They are not part of the Vercel production persistence path.

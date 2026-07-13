@@ -51,7 +51,10 @@ export function HoursTable({
             <TableHead>Billable</TableHead>
             <TableHead>Location</TableHead>
             <TableHead>Project</TableHead>
+            <TableHead>Session ID</TableHead>
+            <TableHead>Billing</TableHead>
             <TableHead>Work Log</TableHead>
+            <TableHead>Invoice</TableHead>
             <TableHead>Notes</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
@@ -60,7 +63,7 @@ export function HoursTable({
           {isLoading ? (
             Array.from({ length: 6 }).map((_, i) => (
               <TableRow key={i}>
-                {Array.from({ length: 12 }).map((__, j) => (
+                {Array.from({ length: 15 }).map((__, j) => (
                   <TableCell key={j}>
                     <Skeleton className="h-4 w-16" />
                   </TableCell>
@@ -69,13 +72,13 @@ export function HoursTable({
             ))
           ) : entries.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={12} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={15} className="h-24 text-center text-muted-foreground">
                 No hours entries in this range yet.
               </TableCell>
             </TableRow>
           ) : (
             entries.map((entry) => (
-              <TableRow key={entry.id}>
+              <TableRow key={entry.id} className={entry.superseded ? "opacity-60" : undefined}>
                 <TableCell className="font-medium">{formatDate(entry.date)}</TableCell>
                 <TableCell>{entry.startTime}</TableCell>
                 <TableCell>{entry.endTime}</TableCell>
@@ -93,8 +96,23 @@ export function HoursTable({
                 <TableCell className="max-w-36 truncate" title={entry.projectName ?? undefined}>
                   {entry.projectName ?? "—"}
                 </TableCell>
+                <TableCell className="max-w-28 truncate font-mono text-xs" title={entry.sessionId ?? undefined}>
+                  {entry.sessionId ?? "—"}
+                </TableCell>
+                <TableCell>
+                  {entry.superseded ? (
+                    <Badge variant="destructive">Superseded / Do Not Bill</Badge>
+                  ) : entry.billingStatus ? (
+                    <Badge variant="outline">{entry.billingStatus.replace(/-/g, " ")}</Badge>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
                 <TableCell className="max-w-40 truncate" title={entry.workLogTitle ?? undefined}>
                   {entry.workLogTitle ?? "—"}
+                </TableCell>
+                <TableCell className="max-w-32 truncate" title={entry.invoiceReportLabel ?? undefined}>
+                  {entry.invoiceReportLabel ?? "—"}
                 </TableCell>
                 <TableCell className="max-w-48 truncate" title={entry.notes || undefined}>
                   {entry.notes || "—"}

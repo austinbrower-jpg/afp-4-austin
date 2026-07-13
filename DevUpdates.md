@@ -1411,3 +1411,36 @@ No Notion write path was called. No source Hours, Work Done, Project, Client, In
 - Protected Preview `dpl_7qhnM8sxsYAvs93Ar159MXqw1Tq9` is Ready. Anonymous access redirects to Vercel SSO. Health reports Notion mode, SQLite disabled, and sync disabled. `/api/settings` returned 200 with `client: null`; report settings returned 200; read-only database verification returned Ready for all six databases.
 - Production `dpl_4vxS6DYo8pHGcf8et3Q21WD6P7Jo` is Ready and aliased to `https://afp-workspace-invoice.vercel.app`. Anonymous Settings/API access returns 401. Health reports Notion mode, SQLite disabled, `NOTION_SYNC_ENABLED=false`, Basic Auth, and no errors or warnings.
 - Verification issued only GET requests plus browser-local Settings storage. No Notion record, schema, source record, or environment variable was created or changed. The historical import was not run. No commit or push occurred.
+
+---
+
+## 2026-07-13 — Phase 11: Explicit Notion Relations and Reliable Invoice Tracking (Cloud Agent)
+
+### Summary
+
+Phase 11 on branch `feat/notion-relations-refactor` off `main` (`75328d3`). Implements read-only/code architecture for explicit Notion relations, stable Session ID and Work Log ID helpers, superseded-row quarantine, relation-based Report Builder matching, invoice locking design, July 8–10 backfill preview, UI surfacing, extended schema verification, tests, and documentation. **No live Notion writes, no schema changes, no deployment, no merge.**
+
+### Implemented
+
+- **Additive schema proposal** — `src/lib/notion/relational-schema-proposal.ts` documents Hours, Work Done, Invoice Reports, and Projects relation targets with reciprocal behavior. Not applied live.
+- **Stable identities** — `src/lib/notion/identity/session-id.ts` (`AFP-YYYY-MM-DD-###`) and `work-log-id.ts` (`AFP-WORK-YYYY-MM-DD-###`) with collision prevention and backfill ordering tests.
+- **Quarantine** — `src/lib/notion/quarantine.ts` detects `afp-history-v2-superseded-*` migration keys and Billing Status = Superseded; dashboard/calculations exclude superseded rows from operational totals.
+- **Explicit matching** — `src/lib/reports/relation-matching.ts` implements explicit → reciprocal → legacy fallback → ambiguous rejection; engine and Report Builder show match source on exclusions.
+- **Invoice locking** — `src/lib/invoices/invoice-locking.ts` read-only lock plan: duplicate billing prevention, partial failure, idempotent retry design. No live invoice writes.
+- **Backfill preview** — `GET /api/notion/relation-backfill-preview` and `/settings/relation-backfill-preview` for July 8–10 corrected dataset (987 billable min, 120 non-billable min, $493.50).
+- **UI** — Hours (Session ID, Billing Status, Invoice, Superseded badge), Work Done (Work Log ID, Approval, Related Hours count), Invoice Reports (included counts, sent/paid, PDF), Report Builder (match source on exclusions).
+- **Schema verifier** — extended `GET /api/notion/schema-preview` with relational property checks.
+- **Docs** — README, notion-production-mode, report-generation, notion-migration-plan, new notion-relational-model.md.
+
+### Confirmations
+
+- `NOTION_SYNC_ENABLED` remains false; general sync engine not enabled.
+- No live Notion data modified; no schema applied.
+- Production URL unchanged: `https://afp-workspace-invoice.vercel.app/`
+- Invoice metadata save during development not performed.
+
+### Remaining approvals
+
+- Review and approve additive schema proposal before any live `dataSources.update`.
+- Run relation backfill preview against live July 8–10 rows and approve proposed writes separately.
+- Approve enabling explicit invoice save mutations after schema exists.

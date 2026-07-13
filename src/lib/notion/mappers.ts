@@ -30,6 +30,7 @@ export const NOTION_SCHEMA = {
     description: "Description",
     tags: "Tags",
     color: "Color",
+    client: "Client",
   },
   hours: {
     title: "Date",
@@ -44,6 +45,11 @@ export const NOTION_SCHEMA = {
     project: "Project",
     notes: "Notes",
     migrationKey: "Migration Key",
+    sessionId: "Session ID",
+    client: "Client",
+    relatedWorkDone: "Related Work Done",
+    invoiceReport: "Invoice Report",
+    billingStatus: "Billing Status",
   },
   worklog: {
     title: "Title",
@@ -61,6 +67,10 @@ export const NOTION_SCHEMA = {
     internalNotes: "Internal Notes",
     evidenceLinks: "Evidence Links",
     relatedHours: "Related Hours",
+    workLogId: "Work Log ID",
+    client: "Client",
+    invoiceReport: "Invoice Report",
+    approvalStatus: "Approval Status",
   },
   knowledge: {
     title: "Title",
@@ -81,6 +91,15 @@ export const NOTION_SCHEMA = {
     totalAmount: "Total Amount",
     status: "Status",
     summary: "Summary",
+    client: "Client",
+    includedHours: "Included Hours",
+    includedWorkDone: "Included Work Done",
+    invoiceDate: "Invoice Date",
+    dueDate: "Due Date",
+    paymentTerms: "Payment Terms",
+    sentDate: "Sent Date",
+    paidDate: "Paid Date",
+    pdfUrl: "PDF URL",
   },
 } as const;
 
@@ -284,6 +303,7 @@ export function hoursFromNotionProperties(
   props: Record<string, NotionPropertyValue>,
 ): Partial<HoursEntry> {
   const s = NOTION_SCHEMA.hours;
+  const relatedWorkDoneIds = extractRelationIds(props[s.relatedWorkDone]);
   return {
     date: extractDate(props[s.date]) ?? undefined,
     startTime: extractPlainText(props[s.startTime]),
@@ -294,7 +314,38 @@ export function hoursFromNotionProperties(
     billable: extractCheckbox(props[s.billable]),
     location: extractPlainText(props[s.location]),
     notes: extractPlainText(props[s.notes]),
+    sessionId: extractPlainText(props[s.sessionId]) || null,
+    billingStatus: normalizeBillingStatus(extractSelect(props[s.billingStatus])),
+    relatedWorkDoneIds,
+    relatedWorkLogId: relatedWorkDoneIds[0] ?? null,
+    invoiceReportId: extractRelationIds(props[s.invoiceReport])[0] ?? null,
+    externalId: extractPlainText(props[s.migrationKey]) || null,
   };
+}
+
+function normalizeBillingStatus(value: string | null): HoursEntry["billingStatus"] {
+  if (!value) return null;
+  const map: Record<string, NonNullable<HoursEntry["billingStatus"]>> = {
+    Draft: "draft",
+    Reviewed: "reviewed",
+    "Ready to Invoice": "ready-to-invoice",
+    Invoiced: "invoiced",
+    Paid: "paid",
+    Superseded: "superseded",
+  };
+  return map[value] ?? null;
+}
+
+function normalizeApprovalStatus(value: string | null): WorkLog["approvalStatus"] {
+  if (!value) return null;
+  const map: Record<string, NonNullable<WorkLog["approvalStatus"]>> = {
+    Draft: "draft",
+    "Needs Review": "needs-review",
+    Approved: "approved",
+    "Sent to Client": "sent-to-client",
+    Archived: "archived",
+  };
+  return map[value] ?? null;
 }
 
 export function worklogFromNotionProperties(
@@ -317,6 +368,9 @@ export function worklogFromNotionProperties(
     internalNotes: extractPlainText(props[s.internalNotes]),
     evidenceLinks: extractPlainText(props[s.evidenceLinks]).split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
     relatedHoursIds: extractRelationIds(props[s.relatedHours]),
+    workLogId: extractPlainText(props[s.workLogId]) || null,
+    approvalStatus: normalizeApprovalStatus(extractSelect(props[s.approvalStatus])),
+    invoiceReportId: extractRelationIds(props[s.invoiceReport])[0] ?? null,
   };
 }
 
@@ -349,5 +403,13 @@ export function invoiceFromNotionProperties(
     totalAmount: extractNumber(props[s.totalAmount]),
     status: (extractSelect(props[s.status]) as InvoiceReport["status"]) ?? "draft",
     summary: extractPlainText(props[s.summary]),
+    hoursEntryIds: extractRelationIds(props[s.includedHours]),
+    workDoneIds: extractRelationIds(props[s.includedWorkDone]),
+    invoiceDate: extractDate(props[s.invoiceDate]),
+    dueDate: extractDate(props[s.dueDate]),
+    paymentTerms: extractPlainText(props[s.paymentTerms]) || null,
+    sentDate: extractDate(props[s.sentDate]),
+    paidDate: extractDate(props[s.paidDate]),
+    pdfUrl: extractUrl(props[s.pdfUrl]),
   };
 }

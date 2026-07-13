@@ -2,7 +2,7 @@ import { Cloud, LockKeyhole } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { RuntimeConfigResult } from "@/lib/data/runtime-config";
-import { PROPOSED_NOTION_SCHEMA_CHANGES } from "@/lib/notion/schema-requirements";
+import { PHASE11_RELATIONAL_SCHEMA_PROPOSAL, PROPOSED_NOTION_SCHEMA_CHANGES } from "@/lib/notion/schema-requirements";
 
 export function NotionProductionCard({ config }: { config: RuntimeConfigResult }) {
   return (
@@ -27,7 +27,19 @@ export function NotionProductionCard({ config }: { config: RuntimeConfigResult }
               </li>
             ))}
           </ul>
-          <p className="text-xs text-muted-foreground">No schema-apply action exists. Use the read-only verifier below to compare this preview with the current databases.</p>
+          <p className="text-xs text-muted-foreground">No schema-apply action exists. Use the read-only verifier below and the relation backfill preview to compare proposals with live databases.</p>
+        </div>
+        <div className="space-y-2 rounded-lg border p-3">
+          <p className="font-medium">Phase 11 relational proposal (additive only)</p>
+          <ul className="space-y-1 text-xs text-muted-foreground">
+            {PHASE11_RELATIONAL_SCHEMA_PROPOSAL.flatMap((db) =>
+              db.properties.map((prop) => (
+                <li key={`${db.database}-${prop.name}`}>
+                  {db.database}: <code>{prop.name}</code> ({prop.type})
+                </li>
+              )),
+            )}
+          </ul>
         </div>
         {config.errors.length > 0 && <ul className="list-disc space-y-1 pl-5 text-destructive">{config.errors.map((error) => <li key={error}>{error}</li>)}</ul>}
       </CardContent>
