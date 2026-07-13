@@ -1630,3 +1630,7 @@ Read-only preflight and UI first. **No live invoice save**, **no Hours/Work Done
 - Commit, push, merge, deploy
 
 Awaiting user approval of read-only preflight report before any live write or git push.
+
+## 2026-07-13 — Phase 15: Production Hardening & Daily Workflow
+
+Implemented code-only read paths for invoice dashboard summaries, client billing history, invoice timelines, richer invoice search, financial reports, PDF storage provider interfaces, centralized API error formatting, and Notion adapter helpers. Documentation updated for the new dashboard/reporting architecture. No live Notion writes, invoice saves, production API mutations, deployments, or environment variable changes were performed.

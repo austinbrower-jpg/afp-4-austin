@@ -87,3 +87,7 @@ npm run dev
 | `/api/health` | Unauthenticated secret-safe health status |
 
 The Electron scaffold and historical migration tooling remain available for local development. They are not part of the Vercel production persistence path.
+
+## Phase 15 production hardening
+
+Phase 15 adds a read-only Invoice Dashboard at `/invoices/dashboard`, financial reporting models, richer invoice search helpers, invoice timelines, a future PDF storage abstraction, centralized API error formatting, and Notion adapter helper utilities. These additions are code-only and do not enable live Notion writes or production deployment.
