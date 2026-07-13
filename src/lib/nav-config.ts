@@ -7,6 +7,7 @@ import {
   FileOutput,
   ChartColumn,
   FolderKanban,
+  Users,
   BookOpen,
   StickyNote,
   Workflow,
@@ -39,6 +40,12 @@ export const NAV: NavEntry[] = [
     href: "/",
     icon: LayoutDashboard,
     description: "Overview of hours, invoices, and recent activity",
+  },
+  {
+    title: "Clients",
+    href: "/clients",
+    icon: Users,
+    description: "Read-only client roster, revenue, and billing history",
   },
   {
     title: "Invoice Details",

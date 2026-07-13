@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { getDataProvider } from "@/lib/data/provider";
 import { HoursWorkspace } from "@/features/hours/components/hours-workspace";
+import { NotionSourceBanner } from "@/components/shared/notion-source-banner";
 
 export default async function HoursPage() {
   await connection();
@@ -9,10 +10,15 @@ export default async function HoursPage() {
     provider.clients.list(), provider.projects.list(), provider.workLogs.list(),
   ]);
   const client = clients[0];
-  return <HoursWorkspace
-    dataSourceMode={provider.mode}
-    projects={projects.map((project) => ({ id: project.id, name: project.name }))}
-    workLogs={workLogs.map((work) => ({ id: work.id, title: work.title, date: work.date }))}
-    defaultHourlyRate={client?.defaultHourlyRate ?? 0}
-  />;
+  return (
+    <div className="flex flex-col gap-4">
+      {provider.mode === "notion" && <NotionSourceBanner entityLabel="hours ledger" />}
+      <HoursWorkspace
+        dataSourceMode={provider.mode}
+        projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+        workLogs={workLogs.map((work) => ({ id: work.id, title: work.title, date: work.date }))}
+        defaultHourlyRate={client?.defaultHourlyRate ?? 0}
+      />
+    </div>
+  );
 }

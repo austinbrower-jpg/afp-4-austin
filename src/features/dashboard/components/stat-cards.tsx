@@ -6,13 +6,12 @@ import type { LucideIcon } from "lucide-react";
 import {
   CalendarDays,
   CalendarRange,
+  CheckCircle2,
   Clock,
-  DollarSign,
-  FolderKanban,
-  Wallet,
+  FileClock,
+  Hourglass,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatHours } from "@/lib/calculations";
 import type { DashboardSummary } from "../api";
@@ -85,13 +84,7 @@ export function StatCardsGrid({
     );
   }
 
-  const { today, week, month, currentHourlyRate, currentInvoiceAmount, activeProject, client } =
-    summary;
-
-  const priorityVariant =
-    activeProject?.priority === "urgent" || activeProject?.priority === "high"
-      ? "destructive"
-      : "secondary";
+  const { today, week, month, readyToInvoice, alreadyInvoiced, outstanding } = summary;
 
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
@@ -114,32 +107,25 @@ export function StatCardsGrid({
         subtitle={format(parseISO(month.start), "MMMM yyyy")}
       />
       <StatCard
-        icon={DollarSign}
-        label="Current Invoice Amount"
-        value={formatCurrency(currentInvoiceAmount)}
-        subtitle={summary.unbilledSince ? "Unbilled since last invoice" : "Unbilled (no invoices yet)"}
+        icon={Hourglass}
+        label="Ready to Invoice"
+        value={formatCurrency(readyToInvoice.amount)}
+        subtitle={`${formatHours(readyToInvoice.hours)} unbilled`}
+        href="/reports"
+      />
+      <StatCard
+        icon={FileClock}
+        label="Already Invoiced"
+        value={formatCurrency(alreadyInvoiced.amount)}
+        subtitle={`${alreadyInvoiced.count} invoice${alreadyInvoiced.count === 1 ? "" : "s"}`}
         href="/invoices"
       />
       <StatCard
-        icon={Wallet}
-        label="Hourly Rate"
-        value={`${formatCurrency(currentHourlyRate)}/hr`}
-        subtitle={client?.name ?? "No client"}
-      />
-      <StatCard
-        icon={FolderKanban}
-        label="Active Project"
-        value={activeProject?.name ?? "None"}
-        subtitle={
-          activeProject ? (
-            <Badge variant={priorityVariant} className="mt-0.5">
-              {activeProject.priority}
-            </Badge>
-          ) : (
-            "No active project"
-          )
-        }
-        href={activeProject ? `/projects/${activeProject.id}` : undefined}
+        icon={CheckCircle2}
+        label="Outstanding"
+        value={formatCurrency(outstanding.amount)}
+        subtitle={`${outstanding.count} unpaid`}
+        href="/invoices/dashboard"
       />
     </div>
   );

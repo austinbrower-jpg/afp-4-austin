@@ -1,6 +1,6 @@
 export type ReportType = "simple-invoice" | "detailed-invoice" | "work-log-report";
 
-export type ReportDataSource = "local-mock" | "historical-preview" | "notion";
+export type ReportDataSource = "local-mock" | "historical-preview" | "july-8-10-corrected" | "notion";
 
 export interface ReportClient {
   id: string;
@@ -84,10 +84,13 @@ export interface ReportSettings {
   email: string;
   phone: string;
   address: string;
+  website: string;
   defaultHourlyRate: number;
   defaultPaymentTerms: string;
   defaultInvoiceNotes: string;
   logoPath: string;
+  invoiceFooter: string;
+  paymentInstructions: string;
   clientDisplayName: string;
   clientBillingContact: string;
   clientBillingEmail: string;
@@ -189,7 +192,10 @@ export interface ReportDocument {
     email: string;
     phone: string;
     address: string;
+    website: string;
     logoPath: string;
+    invoiceFooter: string;
+    paymentInstructions: string;
   };
   invoice: {
     number: string;
@@ -219,14 +225,17 @@ export interface ReportDocument {
 
 export const DEFAULT_REPORT_SETTINGS: ReportSettings = {
   contractorName: "Austin Brower",
-  businessName: "",
+  businessName: "Battle Bound Branding LLC",
   email: "",
   phone: "",
   address: "",
+  website: "",
   defaultHourlyRate: 30,
   defaultPaymentTerms: "Net 15",
   defaultInvoiceNotes: "Thank you for your business.",
   logoPath: "",
+  invoiceFooter: "",
+  paymentInstructions: "",
   clientDisplayName: "",
   clientBillingContact: "",
   clientBillingEmail: "",

@@ -6,18 +6,31 @@ function Identity({ report }: { report: ReportDocument }) {
   return (
     <>
       <header className="flex flex-col justify-between gap-5 border-b-2 border-slate-700 pb-6 sm:flex-row">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{report.type === "work-log-report" ? "Client report" : "Invoice"}</div>
-          <h2 className="mt-1 font-serif text-3xl font-semibold text-slate-900">{report.title}</h2>
-          <p className="mt-1 text-sm text-slate-500">{report.invoice.periodStart} to {report.invoice.periodEnd}</p>
+        <div className="flex items-start gap-4">
+          {report.contractor.logoPath && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={report.contractor.logoPath} alt={`${report.contractor.businessName || report.contractor.name} logo`} className="h-14 w-14 shrink-0 rounded-md border border-slate-200 object-contain" />
+          )}
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{report.type === "work-log-report" ? "Client report" : "Invoice"}</div>
+            <h2 className="mt-1 font-serif text-3xl font-semibold text-slate-900">{report.title}</h2>
+            <p className="mt-1 text-sm text-slate-500">{report.invoice.periodStart} to {report.invoice.periodEnd}</p>
+          </div>
         </div>
         <div className="text-left text-sm sm:text-right">
-          <strong className="block text-slate-900">{report.contractor.businessName || report.contractor.name}</strong>
+          <strong className="block text-lg text-slate-900">{report.contractor.businessName || report.contractor.name}</strong>
           {report.contractor.businessName && <span className="block">{report.contractor.name}</span>}
           {report.contractor.email && <span className="block">{report.contractor.email}</span>}
           {report.contractor.phone && <span className="block">{report.contractor.phone}</span>}
+          {report.contractor.website && <span className="block">{report.contractor.website}</span>}
         </div>
       </header>
+      {report.type === "work-log-report" && (
+        <div className="mt-4 grid gap-1 text-sm text-slate-600 sm:grid-cols-2">
+          <div><span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Prepared for</span> <strong className="text-slate-900">{report.client.name}</strong></div>
+          <div className="sm:text-right"><span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Prepared by</span> <strong className="text-slate-900">{report.contractor.businessName || report.contractor.name}</strong></div>
+        </div>
+      )}
       <div className="mt-6 grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2">
         <div><span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">Client</span><strong>{report.client.name}</strong>{report.client.billingContact && <span className="block">Attn: {report.client.billingContact}</span>}{report.client.billingEmail && <span className="block">{report.client.billingEmail}</span>}</div>
         {report.type !== "work-log-report" && <div className="grid grid-cols-2 gap-3">
@@ -34,7 +47,7 @@ function Identity({ report }: { report: ReportDocument }) {
 function ProjectTotals({ report }: { report: ReportDocument }) {
   return (
     <section className="mt-8">
-      <h3 className="border-b border-slate-200 pb-2 font-serif text-lg font-semibold text-slate-800">{report.type === "work-log-report" ? "Hours by project" : "Project totals"}</h3>
+      <h3 className="border-b border-slate-200 pb-2 font-serif text-lg font-semibold text-slate-800">{report.type === "work-log-report" ? "Project Summary" : "Project totals"}</h3>
       <table className="mt-2 w-full text-sm">
         <thead><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="py-2">Project</th><th className="py-2 text-right">Time</th><th className="py-2 text-right">Billable value</th></tr></thead>
         <tbody>{report.projectTotals.map((row) => <tr className="border-t border-slate-100" key={row.key}><td className="py-2.5">{row.label}</td><td className="py-2.5 text-right tabular-nums">{formatMinutes(row.exactMinutes)}</td><td className="py-2.5 text-right tabular-nums">{formatMoney(row.amount)}</td></tr>)}</tbody>
@@ -68,15 +81,55 @@ function InvoicePreview({ report }: { report: ReportDocument }) {
   );
 }
 
+function WorkLog({ report }: { report: ReportDocument }) {
+  return (
+    <section className="mt-8 overflow-x-auto">
+      <h3 className="border-b border-slate-200 pb-2 font-serif text-lg font-semibold text-slate-800">Work Log</h3>
+      {report.sessions.length === 0 ? <p className="mt-4 text-sm text-slate-500">No time entries in this period.</p> : (
+        <table className="mt-2 min-w-[600px] w-full text-xs">
+          <thead><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="py-2">Date / time</th><th className="py-2">Project</th><th className="py-2 text-right">Duration</th></tr></thead>
+          <tbody>{report.sessions.map((line) => <tr className="border-t border-slate-100 align-top" key={line.id}><td className="w-32 py-3">{line.date}<span className="block text-slate-500">{line.startTime}–{line.endTime}</span></td><td className="py-3">{line.projectName}</td><td className="py-3 text-right tabular-nums">{formatMinutes(line.exactMinutes)}</td></tr>)}</tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+function EvidenceLinks({ report }: { report: ReportDocument }) {
+  const links = [...new Set(report.workItems.flatMap((item) => item.evidenceLinks))];
+  if (links.length === 0) return null;
+  return (
+    <section className="mt-8">
+      <h3 className="border-b border-slate-200 pb-2 font-serif text-lg font-semibold text-slate-800">Evidence Links</h3>
+      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{links.map((link) => <li className="break-all" key={link}>{link}</li>)}</ul>
+    </section>
+  );
+}
+
+function Screenshots() {
+  return (
+    <section className="mt-8">
+      <h3 className="border-b border-slate-200 pb-2 font-serif text-lg font-semibold text-slate-800">Screenshots</h3>
+      <div className="mt-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-xs text-slate-500">Screenshot attachments are coming soon.</div>
+    </section>
+  );
+}
+
 function WorkLogPreview({ report }: { report: ReportDocument }) {
   return (
     <>
       <section className="mt-8"><h3 className="font-serif text-lg font-semibold text-slate-800">Executive summary</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{report.summary}</p></section>
-      <section className="mt-8"><h3 className="border-b border-slate-200 pb-2 font-serif text-lg font-semibold text-slate-800">Daily work breakdown</h3>{report.workItems.length === 0 ? <p className="mt-4 text-sm text-slate-500">No approved client-visible work entries.</p> : report.workItems.map((item) => <article className="mt-5 border-l-2 border-slate-300 pl-4" key={item.id}><div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{item.date} · {item.projectName}</div><h4 className="mt-1 font-semibold text-slate-900">{item.title}</h4><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">{item.description}</p>{([['Deliverables completed', item.deliverables], ['Testing and verification', item.testingPerformed], ['Blockers', item.blockers], ['Follow-up items', item.followUpItems], ['Evidence', item.evidenceLinks]] as const).map(([label, values]) => values.length > 0 && <div className="mt-3" key={label}><h5 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</h5><ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-slate-700">{values.map((value) => <li className="break-words" key={value}>{value}</li>)}</ul></div>)}<div className="mt-3 text-xs font-medium text-slate-500">Related time: {formatMinutes(item.relatedHoursMinutes)}</div></article>)}</section>
+      <section className="mt-8"><h3 className="border-b border-slate-200 pb-2 font-serif text-lg font-semibold text-slate-800">Completed Work</h3>{report.workItems.length === 0 ? <p className="mt-4 text-sm text-slate-500">No approved client-visible work entries.</p> : report.workItems.map((item) => <article className="mt-5 border-l-2 border-slate-300 pl-4" key={item.id}><div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{item.date} · {item.projectName}</div><h4 className="mt-1 font-semibold text-slate-900">{item.title}</h4><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">{item.description}</p>{([['Deliverables completed', item.deliverables], ['Testing and verification', item.testingPerformed], ['Blockers', item.blockers], ['Follow-up items', item.followUpItems], ['Evidence', item.evidenceLinks]] as const).map(([label, values]) => values.length > 0 && <div className="mt-3" key={label}><h5 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</h5><ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-slate-700">{values.map((value) => <li className="break-words" key={value}>{value}</li>)}</ul></div>)}<div className="mt-3 text-xs font-medium text-slate-500">Related time: {formatMinutes(item.relatedHoursMinutes)}</div></article>)}</section>
+      <Screenshots />
+      <EvidenceLinks report={report} />
+      <WorkLog report={report} />
       {report.knowledgeItems.length > 0 && <section className="mt-8"><h3 className="border-b border-slate-200 pb-2 font-serif text-lg font-semibold text-slate-800">Related knowledge</h3>{report.knowledgeItems.map((item) => <article className="mt-4" key={item.id}><h4 className="font-semibold">{item.title}</h4><p className="mt-1 text-sm leading-6 text-slate-700">{item.summary}</p>{item.sourcePage && <p className="mt-1 break-all text-xs text-slate-500">{item.sourcePage}</p>}</article>)}</section>}
       <DailyTotals report={report} />
       <ProjectTotals report={report} />
-      <section className="mt-8 grid gap-3 rounded-lg bg-slate-800 p-5 text-white sm:grid-cols-3"><div><span className="block text-[10px] uppercase tracking-wider text-slate-300">Billable</span><strong className="text-lg">{formatMinutes(report.totals.billableMinutes)}</strong></div><div><span className="block text-[10px] uppercase tracking-wider text-slate-300">Non-billable</span><strong className="text-lg">{formatMinutes(report.totals.nonBillableMinutes)}</strong></div><div><span className="block text-[10px] uppercase tracking-wider text-slate-300">Total</span><strong className="text-lg">{formatMinutes(report.totals.billableMinutes + report.totals.nonBillableMinutes)}</strong></div></section>
+      <section className="mt-8">
+        <h3 className="border-b border-slate-200 pb-2 font-serif text-lg font-semibold text-slate-800">Time Summary</h3>
+        <div className="mt-2 grid gap-3 rounded-lg bg-slate-800 p-5 text-white sm:grid-cols-3"><div><span className="block text-[10px] uppercase tracking-wider text-slate-300">Billable</span><strong className="text-lg">{formatMinutes(report.totals.billableMinutes)}</strong></div><div><span className="block text-[10px] uppercase tracking-wider text-slate-300">Non-billable</span><strong className="text-lg">{formatMinutes(report.totals.nonBillableMinutes)}</strong></div><div><span className="block text-[10px] uppercase tracking-wider text-slate-300">Total</span><strong className="text-lg">{formatMinutes(report.totals.billableMinutes + report.totals.nonBillableMinutes)}</strong></div></div>
+      </section>
     </>
   );
 }
@@ -88,7 +141,16 @@ export function ReportPreview({ report }: { report: ReportDocument }) {
       <div className="mx-auto max-w-[8.5in] p-6 sm:p-10">
         <Identity report={report} />
         {report.type === "work-log-report" ? <WorkLogPreview report={report} /> : <InvoicePreview report={report} />}
-        <footer className="mt-10 border-t border-slate-200 pt-3 text-center text-[10px] text-slate-400">{report.title} · {report.client.name}</footer>
+        {report.contractor.paymentInstructions && report.type !== "work-log-report" && (
+          <section className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Payment instructions</h3>
+            <p className="mt-1 whitespace-pre-wrap">{report.contractor.paymentInstructions}</p>
+          </section>
+        )}
+        <footer className="mt-10 border-t border-slate-200 pt-3 text-center text-[10px] text-slate-400">
+          {report.contractor.invoiceFooter && <p className="mb-1 whitespace-pre-wrap">{report.contractor.invoiceFooter}</p>}
+          <p>{report.contractor.businessName || report.contractor.name} · {report.title} · {report.client.name}</p>
+        </footer>
       </div>
     </div>
   );

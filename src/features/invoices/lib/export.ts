@@ -8,21 +8,39 @@ export interface WorkPerformedItem {
   hours: number;
 }
 
+export interface InvoiceBranding {
+  businessName: string;
+  logoPath: string;
+  invoiceFooter: string;
+  paymentInstructions: string;
+}
+
 export interface InvoiceExportData {
   invoice: InvoiceReport;
   clientName: string;
   workPerformed: WorkPerformedItem[];
+  /** Falls back to Battle Bound Branding LLC defaults when omitted. */
+  branding?: InvoiceBranding;
 }
+
+const DEFAULT_BRANDING: InvoiceBranding = {
+  businessName: "Battle Bound Branding LLC",
+  logoPath: "",
+  invoiceFooter: "",
+  paymentInstructions: "",
+};
 
 function escapeMdCell(value: string): string {
   return (value || "").replace(/\|/g, "\\|").replace(/\s*\n+\s*/g, " ").trim();
 }
 
 /** Builds the markdown representation used for both the .md export and clipboard copy. */
-export function buildInvoiceMarkdown({ invoice, clientName, workPerformed }: InvoiceExportData): string {
+export function buildInvoiceMarkdown({ invoice, clientName, workPerformed, branding }: InvoiceExportData): string {
+  const brand = branding ?? DEFAULT_BRANDING;
   const lines: string[] = [];
   lines.push(`# Invoice ${invoice.invoiceNumber}`);
   lines.push("");
+  lines.push(`**From:** ${brand.businessName}  `);
   lines.push(`**Client:** ${clientName}  `);
   lines.push(`**Period:** ${invoice.periodStart} to ${invoice.periodEnd}  `);
   lines.push(`**Hourly Rate:** ${formatCurrency(invoice.hourlyRate)}/hr  `);
@@ -49,6 +67,16 @@ export function buildInvoiceMarkdown({ invoice, clientName, workPerformed }: Inv
   }
   lines.push("");
   lines.push(`**Total: ${formatHours(invoice.totalHours)} — ${formatCurrency(invoice.totalAmount)}**`);
+  if (brand.paymentInstructions) {
+    lines.push("");
+    lines.push("## Payment Instructions");
+    lines.push("");
+    lines.push(brand.paymentInstructions);
+  }
+  lines.push("");
+  lines.push("---");
+  if (brand.invoiceFooter) lines.push("", brand.invoiceFooter);
+  lines.push("", `_${brand.businessName}_`);
   return lines.join("\n");
 }
 
@@ -78,16 +106,29 @@ export async function copyInvoiceMarkdown(data: InvoiceExportData): Promise<void
 
 /** Generates and downloads a clean one-page PDF invoice. */
 export function downloadInvoicePdf(data: InvoiceExportData): void {
-  const { invoice, clientName, workPerformed } = data;
+  const { invoice, clientName, workPerformed, branding } = data;
+  const brand = branding ?? DEFAULT_BRANDING;
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const marginX = 48;
-  let y = 56;
+  let y = 44;
+  const logoIsEmbeddable = brand.logoPath.startsWith("data:image");
+  const titleX = logoIsEmbeddable ? marginX + 42 : marginX;
+  if (logoIsEmbeddable) {
+    try {
+      doc.addImage(brand.logoPath, marginX, y - 4, 32, 32);
+    } catch {
+      // Malformed data URI - fall back to text-only branding.
+    }
+  }
 
   doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text(brand.businessName, titleX, y);
+  y += 22;
   doc.setFontSize(20);
-  doc.text("INVOICE", marginX, y);
+  doc.text("INVOICE", titleX, y);
   doc.setFontSize(11);
   doc.setFont("helvetica", "normal");
   doc.text(invoice.invoiceNumber, pageWidth - marginX, y, { align: "right" });
@@ -194,6 +235,36 @@ export function downloadInvoicePdf(data: InvoiceExportData): void {
     y,
     { align: "right" },
   );
+
+  if (brand.paymentInstructions) {
+    if (y > pageHeight - 100) {
+      doc.addPage();
+      y = 56;
+    } else {
+      y += 26;
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("Payment Instructions", marginX, y);
+    y += 14;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(90);
+    const instructionLines = doc.splitTextToSize(brand.paymentInstructions, pageWidth - marginX * 2);
+    doc.text(instructionLines, marginX, y);
+    doc.setTextColor(0);
+  }
+
+  const pages = doc.getNumberOfPages();
+  for (let page = 1; page <= pages; page += 1) {
+    doc.setPage(page);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(120);
+    const footerLabel = brand.invoiceFooter ? `${brand.invoiceFooter} · ${brand.businessName}` : brand.businessName;
+    doc.text(footerLabel, pageWidth / 2, pageHeight - 26, { align: "center" });
+    doc.setTextColor(0);
+  }
 
   doc.save(`${invoice.invoiceNumber}.pdf`);
 }

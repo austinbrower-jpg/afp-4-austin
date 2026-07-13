@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { FolderKanban } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProjects } from "@/features/projects/hooks/use-projects";
 import { NewProjectDialog } from "@/features/projects/components/new-project-dialog";
 import { ProjectCard } from "@/features/projects/components/project-card";
+import { NotionSourceBanner } from "@/components/shared/notion-source-banner";
+import { runtimeApi } from "@/features/runtime/api";
 import type { ProjectStatus } from "@/types/domain";
 
 const FILTERS: { value: "all" | ProjectStatus; label: string }[] = [
@@ -20,6 +23,11 @@ const FILTERS: { value: "all" | ProjectStatus; label: string }[] = [
 export default function ProjectsPage() {
   const { data: projects, isLoading } = useProjects();
   const [filter, setFilter] = useState<"all" | ProjectStatus>("all");
+  const { data: runtimeStatus } = useQuery({
+    queryKey: ["runtime-status"],
+    queryFn: runtimeApi.status,
+    staleTime: 60_000,
+  });
 
   const filtered = useMemo(() => {
     if (!projects) return [];
@@ -38,6 +46,8 @@ export default function ProjectsPage() {
         </div>
         <NewProjectDialog />
       </div>
+
+      {runtimeStatus?.dataSource === "notion" && <NotionSourceBanner entityLabel="project" />}
 
       <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
         <TabsList>

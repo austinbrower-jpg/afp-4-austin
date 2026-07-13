@@ -38,7 +38,7 @@ export function buildJuly810ReportDataset(): ReportDataset {
   }));
 
   return {
-    source: "historical-preview",
+    source: "july-8-10-corrected",
     label: "July 8–10 corrected dataset",
     description: "Corrected operational July 8–10, 2026 preview with quarantine row excluded from totals.",
     clients: [{ id: JULY810_CLIENT_ID, name: JULY8_10_CLIENT, defaultHourlyRate: JULY8_10_HOURLY_RATE }],

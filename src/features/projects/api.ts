@@ -1,6 +1,7 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api-client/http";
 import type {
   HoursEntry,
+  InvoiceReport,
   KnowledgePage,
   Priority,
   Project,
@@ -20,6 +21,7 @@ export interface ProjectDetail {
   hours: HoursEntry[];
   workLogs: WorkLog[];
   knowledge: KnowledgePage[];
+  invoices: InvoiceReport[];
 }
 
 export interface CreateProjectInput {

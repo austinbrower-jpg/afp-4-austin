@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,6 +10,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatHours } from "@/lib/calculations";
 import { INVOICE_STATUS_BEHAVIOR } from "@/lib/invoices/invoice-status";
+import { apiGet } from "@/lib/api-client/http";
+import { DEFAULT_REPORT_SETTINGS, type ReportSettings } from "@/lib/reports/types";
 import { useInvoice } from "../hooks/use-invoices";
 import { InvoiceStatusBadge } from "./invoice-status-badge";
 import { InvoiceStatusSelect } from "./invoice-status-select";
@@ -29,6 +32,11 @@ function fmtDate(iso: string): string {
 
 export function InvoiceDetailView({ invoiceId }: { invoiceId: string }) {
   const { data: invoice, isLoading, isError } = useInvoice(invoiceId);
+  const settingsQuery = useQuery({
+    queryKey: ["report-settings"],
+    queryFn: () => apiGet<ReportSettings>("/api/report-settings"),
+  });
+  const settings = settingsQuery.data ?? DEFAULT_REPORT_SETTINGS;
 
   if (isLoading) {
     return (
@@ -58,6 +66,12 @@ export function InvoiceDetailView({ invoiceId }: { invoiceId: string }) {
     invoice,
     clientName: invoice.clientName,
     workPerformed: invoice.workPerformed,
+    branding: {
+      businessName: settings.businessName || DEFAULT_REPORT_SETTINGS.businessName,
+      logoPath: settings.logoPath,
+      invoiceFooter: settings.invoiceFooter,
+      paymentInstructions: settings.paymentInstructions,
+    },
   };
 
   const lifecycleNote = INVOICE_STATUS_BEHAVIOR[invoice.status] ?? INVOICE_STATUS_BEHAVIOR.draft;

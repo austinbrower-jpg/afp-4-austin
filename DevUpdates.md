@@ -1634,3 +1634,77 @@ Awaiting user approval of read-only preflight report before any live write or gi
 ## 2026-07-13 — Phase 15: Production Hardening & Daily Workflow
 
 Implemented code-only read paths for invoice dashboard summaries, client billing history, invoice timelines, richer invoice search, financial reports, PDF storage provider interfaces, centralized API error formatting, and Notion adapter helpers. Documentation updated for the new dashboard/reporting architecture. No live Notion writes, invoice saves, production API mutations, deployments, or environment variable changes were performed.
+
+## 2026-07-13 — Phase 16: Battle Bound Branding Client Reporting Portal (Claude Code)
+
+**AI model:** Claude Opus 4.8 (Claude Code)
+
+### Summary
+
+Repositioned the application from "AFP Invoice App" to Battle Bound Branding's client reporting and invoicing portal on top of the same read-mostly Notion-native architecture. Notion remains the permanent source of truth; no live Notion writes, no new environment variables, no invoice saves outside the existing gated `NOTION_INVOICE_SAVE_ENABLED` flow, and no production deployment were performed. See [docs/product-direction.md](docs/product-direction.md) for the full rationale.
+
+### Added
+
+- `src/app/clients/page.tsx`, `src/app/clients/[id]/page.tsx` — new read-only client roster and detail pages (projects, hours, invoices, work history, revenue, outstanding, last invoice), built on the existing `buildClientBillingHistory()` helper
+- `src/features/dashboard/components/{recent-invoices,recent-projects,quick-actions}.tsx` — new Home Dashboard panels
+- `src/features/projects/components/related-invoices-table.tsx` — read-only Invoices section on the project detail page
+- `src/components/shared/notion-source-banner.tsx` — "Notion is the source of truth" banner with an Open in Notion link, applied to Hours, Work Done, and Projects pages in Notion mode
+- `docs/product-direction.md` — product direction, source-of-truth boundary, and explicit out-of-scope list
+
+### Updated
+
+- `src/lib/reports/types.ts`, `engine.ts`, `settings.ts` — `ReportSettings`/`ReportDocument.contractor` gained `website`, `invoiceFooter`, `paymentInstructions`; `businessName` now defaults to **Battle Bound Branding LLC**
+- `src/lib/db/schema.ts`, `client.ts`, `repositories/report-settings.ts` — additive SQLite columns with a startup column migration so existing local `data/*.db` files pick up the new fields without a manual reset
+- `src/features/settings/components/report-settings-card.tsx` — renamed to "Business Branding & Report Settings"; added Website, Business Logo, Invoice Footer, Payment Instructions fields
+- `src/features/reports/components/report-preview.tsx`, `serializers.ts`, `lib/export.ts` (reports and invoices) — Prepared for/Prepared by, renamed headings (Completed Work, Project Summary, Time Summary), a Screenshots placeholder, a consolidated Evidence Links section, a raw Work Log session table, and consistent business branding (logo when `data:image`, footer, payment instructions) across the live preview, PDF, print HTML, HTML download, and Markdown outputs
+- `src/features/reports/components/report-builder.tsx` — added a step-orientation strip and a prominent "Prepared by" branding header above the existing choose-client → dates → sessions → preview → export → optional-save flow
+- `src/app/api/dashboard/route.ts`, `src/types/api.ts` — `DashboardSummary` gained `readyToInvoice`, `alreadyInvoiced`, `outstanding`, `recentInvoices`, `recentProjects`; Home Dashboard stat cards redesigned around invoice health
+- `src/app/api/projects/[id]/route.ts`, `src/features/projects/api.ts` — project detail responses now include related invoices (matched via Hours/Work Done relation ids)
+- `src/lib/nav-config.ts` — added a top-level "Clients" nav item
+- `src/app/layout.tsx`, `src/components/layout/app-sidebar.tsx`, `src/proxy.ts`, `electron/main.js`, `package.json` (`productName`), `README.md` — renamed user-facing branding to "Battle Bound Branding Client Reporting Portal"; baked-in identifiers (session/work-log ID formats, save/import confirmation phrases, migration-key prefixes) were deliberately left unchanged (see docs/product-direction.md)
+- `docs/report-generation.md`, `docs/invoice-dashboard.md` — documented the new report sections, branding fields, and Home Dashboard/Clients read surfaces
+
+### Not performed
+
+- Live Notion writes of any kind
+- New environment variables
+- Invoice saves outside the existing gated Save Invoice to Notion flow
+- Production deployment
+- Renaming baked-in Notion identifiers (confirmation phrases, ID formats, migration-key prefixes)
+- Commit, push, merge
+
+### Verification suite (local)
+
+- `npm run lint` — pass
+- `npm run typecheck` — pass
+- `npm test` — 292/292 pass
+- `npm run build` — pass
+- `git diff --check` — pass
+
+## 2026-07-13 — Phase 16 correction: Report Builder dataset-source collision (Claude Code)
+
+**AI model:** Claude Opus 4.8 (Claude Code)
+
+### Summary
+
+Fixed a bug flagged during Phase 16 review: the "Historical preview data" dataset and the "July 8–10 corrected dataset" both used `source: "historical-preview"` in `ReportDataset`. Report Builder resolves the active dataset with `dataset.source === state.source`, so this collision could make selecting "July 8–10 corrected dataset (6)" from the dropdown silently render the historical-preview dataset instead. No production Notion data was touched; no invoice was saved; nothing was deployed.
+
+### Added
+
+- `src/lib/reports/dataset-resolver.ts` — pure `resolveReportDataset(datasets, requestedSource, recommendedSource)`, safe against unknown/legacy source values (falls back to the recommended dataset, then the first dataset, instead of ever matching the wrong one by accident)
+- `src/lib/reports/dataset-resolver.test.ts` — 7 regression tests: historical selects historical, July 8-10 selects July 8-10, switching doesn't reuse records, a serialized/restored identifier resolves correctly, an unknown value falls back to the recommended dataset (not `datasets[0]` by coincidence), a fully-unknown recommended+requested pair falls back to the first dataset without throwing, and an empty dataset list throws a clear error
+- `src/lib/notion/relation-backfill/july8-10-dataset.test.ts` — locks in the corrected `source` identifier and its distinctness from `historical-preview`
+
+### Updated
+
+- `src/lib/reports/types.ts` — `ReportDataSource` gained `"july-8-10-corrected"`
+- `src/lib/notion/relation-backfill/july8-10-dataset.ts` — `source: "historical-preview"` → `source: "july-8-10-corrected"`
+- `src/features/reports/components/report-builder.tsx` — replaced three unsafe `datasets.find(...)!` lookups (initial state, main render, data-source change handler) with `resolveReportDataset()`
+
+### Verification suite (local)
+
+- `npm run lint` — pass
+- `npm run typecheck` — pass
+- `npm test` — 301/301 pass (292 prior + 9 new)
+- `npm run build` — pass
+- `git diff --check` — pass

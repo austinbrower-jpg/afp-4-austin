@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Database, Eye, LockKeyhole } from "lucide-react";
 import { apiGet } from "@/lib/api-client/http";
 import { composeReport } from "@/lib/reports/engine";
+import { resolveReportDataset } from "@/lib/reports/dataset-resolver";
 import { useBrowserReportSettings } from "@/features/reports/lib/browser-report-settings";
 import type { ReportBuilderData } from "@/lib/reports/data-source";
 import type {
@@ -75,6 +76,28 @@ function LoadingBuilder() {
   return <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]"><Skeleton className="h-[720px]" /><Skeleton className="h-[900px]" /></div>;
 }
 
+interface BuilderStep {
+  label: string;
+  done: boolean;
+}
+
+/** Orientation strip for the invoice-builder workflow; every step is editable at once, this just clarifies the order. */
+function BuilderSteps({ steps }: { steps: BuilderStep[] }) {
+  return (
+    <ol className="flex flex-wrap items-center gap-x-2 gap-y-2 rounded-xl border bg-card p-3 text-xs">
+      {steps.map((step, index) => (
+        <li key={step.label} className="flex items-center gap-2">
+          <span className={`flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold ${step.done ? "border-emerald-600 bg-emerald-600/10 text-emerald-600" : "border-muted-foreground/30 text-muted-foreground"}`}>
+            {step.done ? <CheckCircle2 className="size-3.5" /> : index + 1}
+          </span>
+          <span className={step.done ? "font-medium text-foreground" : "text-muted-foreground"}>{step.label}</span>
+          {index < steps.length - 1 && <span className="mx-1 text-muted-foreground/40">→</span>}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export function ReportBuilder() {
   const builderQuery = useQuery({
     queryKey: ["report-builder-data"],
@@ -92,8 +115,8 @@ export function ReportBuilder() {
   const [hasPreview, setHasPreview] = useState(true);
   if (builderQuery.data && settingsQuery.data && state === null) {
     const source = builderQuery.data.recommendedSource;
-    const dataset = builderQuery.data.datasets.find((candidate) => candidate.source === source)!;
-    setState(makeInitialState(dataset, source, settings));
+    const dataset = resolveReportDataset(builderQuery.data.datasets, source, builderQuery.data.recommendedSource);
+    setState(makeInitialState(dataset, dataset.source, settings));
   }
 
   if (builderQuery.isError || settingsQuery.isError) {
@@ -103,7 +126,7 @@ export function ReportBuilder() {
     return <LoadingBuilder />;
   }
 
-  const dataset = builderQuery.data.datasets.find((candidate) => candidate.source === state.source)!;
+  const dataset = resolveReportDataset(builderQuery.data.datasets, state.source, builderQuery.data.recommendedSource);
   const clientProjects = dataset.projects.filter((project) => project.clientId === state.clientId);
   const report = composeReport(dataset, settings, state);
   const approvedDraftRecords = dataset.workRecords.filter((record) => {
@@ -123,8 +146,8 @@ export function ReportBuilder() {
     setState({ ...state, [key]: value });
   };
   const changeSource = (source: ReportDataSource) => {
-    const next = builderQuery.data!.datasets.find((candidate) => candidate.source === source)!;
-    setState({ ...makeInitialState(next, source, settings), type: state.type });
+    const next = resolveReportDataset(builderQuery.data!.datasets, source, builderQuery.data!.recommendedSource);
+    setState({ ...makeInitialState(next, next.source, settings), type: state.type });
     setHasPreview(true);
   };
   const changeClient = (clientId: string) => {
@@ -141,8 +164,30 @@ export function ReportBuilder() {
     checked ? [...state.projectIds, id] : state.projectIds.filter((projectId) => projectId !== id),
   );
 
+  const steps: BuilderStep[] = [
+    { label: "Choose client", done: Boolean(state.clientId) },
+    { label: "Choose date range", done: Boolean(state.periodStart && state.periodEnd) },
+    { label: "Review sessions", done: report.sessions.length > 0 },
+    { label: "Review work logs", done: report.includedRecords.some((record) => record.kind === "work-done") },
+    { label: "Preview", done: hasPreview && report.sessions.length > 0 },
+    { label: "Export", done: false },
+    ...(state.type !== "work-log-report" ? [{ label: "Save to Notion (optional)", done: false }] : []),
+  ];
+
   return (
-    <div className="grid items-start gap-6 xl:grid-cols-[390px_minmax(0,1fr)]">
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Prepared by</p>
+          <p className="text-lg font-semibold">{settings.businessName || settings.contractorName || DEFAULT_REPORT_SETTINGS.businessName}</p>
+        </div>
+        {settings.logoPath && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={settings.logoPath} alt="Business logo" className="h-12 w-12 rounded-md border object-contain" />
+        )}
+      </div>
+      <BuilderSteps steps={steps} />
+      <div className="grid items-start gap-6 xl:grid-cols-[390px_minmax(0,1fr)]">
       <aside className="space-y-5 xl:sticky xl:top-20">
         <Card>
           <CardHeader><CardTitle>Report setup</CardTitle><CardDescription>Filters and draft edits affect only this preview.</CardDescription></CardHeader>
@@ -198,6 +243,7 @@ export function ReportBuilder() {
           />
         )}
       </main>
+      </div>
     </div>
   );
 }

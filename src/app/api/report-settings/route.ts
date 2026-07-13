@@ -10,14 +10,19 @@ function environmentSettings(): ReportSettings {
   return {
     ...DEFAULT_REPORT_SETTINGS,
     contractorName: process.env.REPORT_CONTRACTOR_NAME || DEFAULT_REPORT_SETTINGS.contractorName,
-    businessName: process.env.REPORT_BUSINESS_NAME || "",
+    businessName: process.env.REPORT_BUSINESS_NAME || DEFAULT_REPORT_SETTINGS.businessName,
     email: process.env.REPORT_EMAIL || "",
     phone: process.env.REPORT_PHONE || "",
     address: process.env.REPORT_ADDRESS || "",
+    // No new env vars: website/invoiceFooter/paymentInstructions use the
+    // Battle Bound Branding defaults in Notion mode; editable in mock mode only.
+    website: DEFAULT_REPORT_SETTINGS.website,
     defaultHourlyRate: Number(process.env.REPORT_DEFAULT_HOURLY_RATE || DEFAULT_REPORT_SETTINGS.defaultHourlyRate),
     defaultPaymentTerms: process.env.REPORT_DEFAULT_PAYMENT_TERMS || DEFAULT_REPORT_SETTINGS.defaultPaymentTerms,
     defaultInvoiceNotes: process.env.REPORT_DEFAULT_INVOICE_NOTES || DEFAULT_REPORT_SETTINGS.defaultInvoiceNotes,
     logoPath: process.env.REPORT_LOGO_PATH || "",
+    invoiceFooter: DEFAULT_REPORT_SETTINGS.invoiceFooter,
+    paymentInstructions: DEFAULT_REPORT_SETTINGS.paymentInstructions,
     clientDisplayName: process.env.REPORT_CLIENT_DISPLAY_NAME || "",
     clientBillingContact: process.env.REPORT_CLIENT_BILLING_CONTACT || "",
     clientBillingEmail: process.env.REPORT_CLIENT_BILLING_EMAIL || "",

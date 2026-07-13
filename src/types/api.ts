@@ -58,6 +58,11 @@ export interface DashboardSummary {
   recentWorkEntries: WorkLog[];
   recentNotes: KnowledgePage[];
   upcomingTasks: WorkLog[];
+  readyToInvoice: { hours: number; amount: number };
+  alreadyInvoiced: { count: number; amount: number };
+  outstanding: { count: number; amount: number };
+  recentInvoices: InvoiceReport[];
+  recentProjects: Project[];
 }
 
 // ---------------------------------------------------------------------------

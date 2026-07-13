@@ -3,7 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Trash2 } from "lucide-react";
+import { runtimeApi } from "@/features/runtime/api";
+import { NotionSourceBanner } from "@/components/shared/notion-source-banner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -34,6 +37,7 @@ import { useDeleteProject, useProject, useUpdateProject } from "../hooks/use-pro
 import { RelatedHoursTable } from "./related-hours-table";
 import { RelatedWorkLogsTable } from "./related-worklogs-table";
 import { RelatedKnowledgeTable } from "./related-knowledge-table";
+import { RelatedInvoicesTable } from "./related-invoices-table";
 import {
   ColorSwatch,
   PRIORITY_LABEL,
@@ -70,6 +74,12 @@ export function ProjectDetailView({ id }: { id: string }) {
   const { data, isLoading, isError } = useProject(id);
   const { mutate: updateProject, isPending: isSaving } = useUpdateProject(id);
   const { mutate: deleteProject, isPending: isDeleting } = useDeleteProject();
+  const { data: runtimeStatus } = useQuery({
+    queryKey: ["runtime-status"],
+    queryFn: runtimeApi.status,
+    staleTime: 60_000,
+  });
+  const notionMode = runtimeStatus?.dataSource === "notion";
 
   const [form, setForm] = useState<FormState | null>(null);
 
@@ -111,7 +121,7 @@ export function ProjectDetailView({ id }: { id: string }) {
     );
   }
 
-  const { project, hours, workLogs, knowledge } = data;
+  const { project, hours, workLogs, knowledge, invoices } = data;
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(toFormState(project));
 
@@ -182,6 +192,8 @@ export function ProjectDetailView({ id }: { id: string }) {
           </AlertDialogContent>
         </AlertDialog>
       </div>
+
+      {notionMode && <NotionSourceBanner notionUrl={project.notionUrl} entityLabel="project" />}
 
       <Card>
         <CardHeader>
@@ -319,6 +331,7 @@ export function ProjectDetailView({ id }: { id: string }) {
         <RelatedWorkLogsTable workLogs={workLogs} />
       </div>
 
+      <RelatedInvoicesTable invoices={invoices} />
       <RelatedKnowledgeTable pages={knowledge} />
     </div>
   );
