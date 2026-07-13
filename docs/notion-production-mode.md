@@ -19,7 +19,7 @@ The legacy sync engine is disabled and is not a dependency of Notion-native writ
 | Hours Worked | yes | explicit | explicit | no |
 | Work Done | yes | explicit | explicit | no |
 | Knowledge | yes, including page blocks | no | no | no |
-| Invoice Reports | yes | after preview/export confirmation | metadata update | no |
+| Invoice Reports | yes | explicit save (gated) | metadata update | no |
 
 POST/PATCH handlers validate request bodies, verify the configured target database schema, update only one target page, and return the page id and URL. Hours creation checks an exact date/start/end/project identity before creating a page. Invoice number duplicates are rejected. Notion errors are converted to useful 4xx/5xx responses without exposing the API key.
 
@@ -54,7 +54,7 @@ Phase 11 designs explicit Notion relations for Hours Worked, Work Done, Invoice 
 - **Session ID** (`AFP-YYYY-MM-DD-###`) and **Work Log ID** (`AFP-WORK-YYYY-MM-DD-###`) helpers assign stable identities without altering Migration Key values.
 - **Superseded** rows (`afp-history-v2-superseded-*` migration keys or Billing Status = Superseded) remain visible in Hours but are excluded from dashboard, invoice, and report totals.
 - **Report Builder** matches Hours to Work Done in order: explicit relation → reciprocal relation → legacy date+project fallback; ambiguous and date-only multi-candidate matches are rejected.
-- **Invoice locking** is implemented as read-only plan logic: preview/export never mutates Notion; explicit save would set Billing Status = Invoiced and link invoice relations.
+- **Invoice locking** (Phase 13): explicit save sets Billing Status = Invoiced and links invoice relations; duplicate billing is blocked at preflight. Live save is gated by `NOTION_INVOICE_SAVE_ENABLED=false` (default). See [invoice-locking.md](./invoice-locking.md).
 - **`GET /api/notion/relation-backfill-preview`** returns a read-only July 8–10 backfill preview. No Notion writes occur.
 
 See [notion-relational-model.md](./notion-relational-model.md).

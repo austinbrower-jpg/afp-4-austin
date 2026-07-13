@@ -81,7 +81,8 @@ function normalizeInvoiceStatus(status: string): string {
 }
 
 export function isCancelledInvoice(status: string): boolean {
-  return normalizeInvoiceStatus(status) === "cancelled";
+  const normalized = normalizeInvoiceStatus(status);
+  return normalized === "cancelled" || normalized === "void";
 }
 
 export function isLockedBillingStatus(status: string | null | undefined): boolean {

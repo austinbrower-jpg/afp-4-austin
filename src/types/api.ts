@@ -80,6 +80,18 @@ export interface InvoiceDetailResponse extends InvoiceReport {
    * generation time if it was deleted.
    */
   workPerformed: WorkPerformedRow[];
+  sessionIds: string[];
+  workLogIds: string[];
+  includedHoursCount: number;
+  includedWorkDoneCount: number;
+  relationWarnings: string[];
+  liveDriftWarnings: string[];
+  immutableTotals: {
+    totalHours: number;
+    totalAmount: number;
+    hourlyRate: number;
+  };
+  notionPageUrl: string | null;
 }
 
 // ---------------------------------------------------------------------------

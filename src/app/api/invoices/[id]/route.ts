@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDataProvider } from "@/lib/data/provider";
 import { dataErrorResponse, NO_STORE_HEADERS } from "@/lib/data/route-utils";
+import { composeSavedInvoiceView } from "@/lib/invoices/invoice-saved-view";
+import { buildStoredDatasetForSave } from "@/lib/invoices/invoice-save-data";
+import { getReportSettings } from "@/lib/reports/settings";
 import type { InvoiceDetailResponse, WorkPerformedRow } from "@/types/api";
 import type { InvoiceReport, InvoiceStatus } from "@/types/domain";
 
@@ -10,12 +13,31 @@ type Context = { params: Promise<{ id: string }> };
 const STATUSES: InvoiceStatus[] = ["draft", "sent", "paid", "void"];
 
 async function augment(invoice: InvoiceReport, provider: Awaited<ReturnType<typeof getDataProvider>>): Promise<InvoiceDetailResponse> {
-  const [workLogs, clients] = await Promise.all([provider.workLogs.list(), provider.clients.list()]);
+  const [workLogs, clients, hours, settings, baseDataset] = await Promise.all([
+    provider.workLogs.list(),
+    provider.clients.list(),
+    provider.hours.list(),
+    getReportSettings(),
+    buildStoredDatasetForSave(provider),
+  ]);
   const workPerformed: WorkPerformedRow[] = invoice.lineItems.map((line) => {
     const work = workLogs.find((entry) => entry.id === line.workLogId);
     return { workLogId: line.workLogId, title: work?.title ?? line.title, description: work?.invoiceDescription || work?.summary || line.description, hours: line.hours, href: work ? `/work-done/${work.id}` : null };
   });
-  return { ...invoice, clientName: clients.find((client) => client.id === invoice.clientId)?.name ?? "Client", workPerformed };
+  const savedView = composeSavedInvoiceView(invoice, hours, workLogs, baseDataset, settings);
+  return {
+    ...invoice,
+    clientName: clients.find((client) => client.id === invoice.clientId)?.name ?? "Client",
+    workPerformed,
+    sessionIds: savedView.sessionIds,
+    workLogIds: savedView.workLogIds,
+    includedHoursCount: invoice.hoursEntryIds.length,
+    includedWorkDoneCount: invoice.workDoneIds?.length ?? 0,
+    relationWarnings: savedView.warnings,
+    liveDriftWarnings: savedView.liveDriftWarnings,
+    immutableTotals: savedView.immutableTotals,
+    notionPageUrl: invoice.notionUrl ?? (invoice.notionPageId ? `https://www.notion.so/${invoice.notionPageId.replace(/-/g, "")}` : null),
+  };
 }
 export async function GET(_request: NextRequest, { params }: Context) {
   try {

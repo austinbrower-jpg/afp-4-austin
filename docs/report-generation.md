@@ -36,7 +36,7 @@ Includes everything in the Simple Invoice plus each approved billable session (d
 - Reloading the builder restores the source description.
 - Source objects are never mutated; automated tests compare them before and after composition.
 - `ReportDocument` has no `internalNotes` property, so Markdown, HTML, PDF input, clipboard, and JSON serialization cannot expose it.
-- “Save invoice metadata to Notion” is available only for a Notion-backed invoice after at least one export. It creates only an Invoice Reports metadata page after a second explicit click and does not write draft descriptions to source records.
+- **Save Invoice to Notion** (Phase 13) is a separate explicit action in Report Builder. Preview, print, PDF, Markdown, JSON, and clipboard never save. Saving requires read-only preflight, reconciliation, typed confirmation (`SAVE AFP INVOICE`), and `NOTION_INVOICE_SAVE_ENABLED=true`. See [invoice-locking.md](./invoice-locking.md).
 
 ## Privacy rules
 
@@ -131,3 +131,13 @@ Mock mode stores contractor name, business name, email, phone, address, default 
 The exact Phase 8 additive preview is recorded in `src/lib/notion/schema-requirements.ts`, shown in Settings, and returned with live read-only verification by `GET /api/notion/schema-preview`. Related Hours remains deferred. No schema update API is implemented or called.
 
 Phase 11 adds a fuller relational proposal in `src/lib/notion/relational-schema-proposal.ts` (Session ID, Client/Invoice relations, Billing Status, Approval Status, etc.). See [notion-relational-model.md](./notion-relational-model.md). `GET /api/notion/relation-backfill-preview` returns a read-only July 8–10 backfill preview with no writes.
+
+## Invoice locking and explicit save (Phase 13)
+
+Phase 13 wires explicit invoice save, Hours locking, and duplicate-billing prevention. Live writes are gated by `NOTION_INVOICE_SAVE_ENABLED=false` (default).
+
+- `POST /api/invoices/save-preflight` — read-only preflight (`writesPerformed=false`)
+- `POST /api/invoices/save` — gated explicit save with confirmation phrase
+- `GET /api/invoices/[id]/preview` — immutable saved-invoice preview from Included relations only
+
+See [invoice-locking.md](./invoice-locking.md).
