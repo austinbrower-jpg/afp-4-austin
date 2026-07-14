@@ -1752,3 +1752,44 @@ Wired the Battle Bound Branding logo into the existing Phase 16 branding system 
 - `npm run typecheck` — pass
 - `npm test` — 301/301 pass
 - `npm run build` — pass
+
+---
+
+## 2026-07-14 14:53 CDT — Clean release-port of Notion hours refresh fix (Codex GPT-5 via shell + gh)
+
+### Task summary
+
+- Created a clean release branch from `origin/main` containing only the Notion hours refresh fix.
+- Manually ported the refresh helper, badge UI, API client cache behavior, hours query staleness, and hours API logging from the contaminated branch without copying historical-import, migration, invoice, reporting, quarantine, or Notion write logic.
+
+### Files changed
+
+- `src/features/runtime/components/data-source-badge.tsx`
+- `src/features/runtime/lib/notion-refresh.ts`
+- `src/features/runtime/lib/notion-refresh.test.ts`
+- `src/lib/api-client/http.ts`
+- `src/lib/api-client/http.test.ts`
+- `src/features/hours/hooks/use-hours.ts`
+- `src/app/api/hours/route.ts`
+- `DevUpdates.md`
+
+### Completed work
+
+- The refresh button now awaits the refresh operation, disables while pending, shows a spinner, and reports success or failure with toast feedback.
+- The badge now persists and displays the last successful sync timestamp, and shows a fallback/local-data status when Notion is not active.
+- The shared API client now defaults GET requests to `cache: "no-store"` while preserving caller-provided options for non-GET requests.
+- Structured API errors are parsed into safe `ApiError` instances.
+- Hours queries now use `staleTime: 0`, and `/api/hours` remains dynamic and uncached with safe diagnostics only.
+
+### Verification results
+
+- `npm run lint` pass, `npm run typecheck` pass, `npm test` pass (306/306), `npm run build` pass, `git diff --check` pass.
+
+### Assumptions
+
+- The existing repo base and remote state were authoritative, and no unrelated user changes were present in the target files.
+- Production verification remains out of scope for this local clean-port task.
+
+### Recommended next step
+
+- Run the full validation suite, review the diff, and then open the new draft PR once the branch is confirmed clean.
