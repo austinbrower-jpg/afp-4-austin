@@ -44,6 +44,15 @@ export interface MappingContext {
 
 const WORKSPACE_ID = "notion-production";
 const FALLBACK_TIME = "1970-01-01T00:00:00.000Z";
+const WORK_DONE_SECTION_HEADINGS = [
+  "Time Summary",
+  "Work Performed",
+  "Technical Changes",
+  "Testing / Verification",
+  "Blockers / Remaining Work",
+  "Invoice Description",
+  "Notes / Evidence",
+] as const;
 
 function enumValue<T extends string>(
   value: unknown,
@@ -79,6 +88,26 @@ function requiredText(value: string, label: string, fallback: string, warnings: 
   if (trimmed) return trimmed;
   warnings.push(`${label} is missing; using "${fallback}".`);
   return fallback;
+}
+
+function extractWorkDoneSection(pageContent: string | undefined, section: string): string {
+  if (!pageContent) return "";
+  const lines = pageContent.split(/\n\n+/).map((line) => line.trim()).filter(Boolean);
+  const start = lines.findIndex((line) => line === section);
+  if (start === -1) return "";
+  const body: string[] = [];
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (WORK_DONE_SECTION_HEADINGS.includes(line as (typeof WORK_DONE_SECTION_HEADINGS)[number])) break;
+    body.push(line);
+  }
+  return body.join("\n\n").trim();
+}
+
+function inferWorkLogStatus(parsedStatus: WorkLog["status"], pageContent: string | undefined): WorkLog["status"] {
+  if (parsedStatus !== "not-started") return parsedStatus;
+  if (pageContent && /\b(Present|Still active|active session)\b/i.test(pageContent)) return "in-progress";
+  return parsedStatus;
 }
 
 function dateFromHoursTitle(page: NotionPageLike, warnings: string[]): string {
@@ -158,6 +187,13 @@ export function mapNotionHours(page: NotionPageLike, context: MappingContext): H
 export function mapNotionWorkLog(page: NotionPageLike, context: MappingContext): WorkLog {
   const warnings: string[] = [];
   const parsed = worklogFromNotionProperties(page.properties);
+  const pageContent = context.pageContent ?? "";
+  const invoiceDescription = parsed.invoiceDescription || extractWorkDoneSection(pageContent, "Invoice Description") || pageContent || "";
+  const workPerformed = extractWorkDoneSection(pageContent, "Work Performed");
+  const technicalChanges = extractWorkDoneSection(pageContent, "Technical Changes");
+  const testingVerification = extractWorkDoneSection(pageContent, "Testing / Verification");
+  const blockers = extractWorkDoneSection(pageContent, "Blockers / Remaining Work");
+  const notes = extractWorkDoneSection(pageContent, "Notes / Evidence");
   return {
     ...common(page, context, warnings),
     workspaceId: context.workspaceId ?? WORKSPACE_ID,
@@ -165,18 +201,21 @@ export function mapNotionWorkLog(page: NotionPageLike, context: MappingContext):
     projectId: parsed.projectId ?? null,
     title: requiredText(parsed.title ?? "", "Work Done title", "Untitled work entry", warnings),
     date: parsed.date || "1970-01-01",
-    summary: parsed.summary || "",
-    detailedNotes: parsed.internalNotes || "",
-    invoiceDescription: parsed.invoiceDescription || "",
-    status: enumValue<WorkLogStatus>(parsed.status, ["not-started", "in-progress", "blocked", "done"], "not-started", "Status", warnings),
+    summary: parsed.summary || invoiceDescription || workPerformed || technicalChanges || pageContent || "",
+    detailedNotes: parsed.internalNotes || blockers || notes || workPerformed || pageContent || "",
+    invoiceDescription,
+    status: inferWorkLogStatus(
+      enumValue<WorkLogStatus>(parsed.status, ["not-started", "in-progress", "blocked", "done"], "not-started", "Status", warnings),
+      pageContent,
+    ),
     priority: enumValue<Priority>(parsed.priority, ["low", "medium", "high", "urgent"], "medium", "Priority", warnings),
     relatedHoursIds: parsed.relatedHoursIds ?? [],
     relatedKnowledgeIds: [],
     evidence: parsed.evidenceLinks ?? [],
     githubLink: parsed.githubLink ?? null,
     attachments: [],
-    detailedWorkDescription: parsed.detailedWorkDescription || parsed.invoiceDescription || "",
-    internalNotes: parsed.internalNotes || "",
+    detailedWorkDescription: parsed.detailedWorkDescription || invoiceDescription || workPerformed || technicalChanges || testingVerification || blockers || notes || pageContent || "",
+    internalNotes: parsed.internalNotes || blockers || notes || "",
     clientVisible: parsed.clientVisible === true,
     includeInInvoice: parsed.includeInInvoice === true,
     includeInWorkReport: parsed.includeInWorkReport === true,
