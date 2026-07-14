@@ -76,6 +76,12 @@ export const ENTITY_PROPERTY_NAMES = {
     priority: "Priority",
     summary: "Summary",
     invoiceDescription: "Invoice Description",
+    clientVisible: "Client Visible",
+    includeInInvoice: "Include in Invoice",
+    includeInWorkReport: "Include in Work Report",
+    detailedWorkDescription: "Detailed Work Description",
+    internalNotes: "Internal Notes",
+    evidenceLinks: "Evidence Links",
     project: "Project",
   },
 } as const;
@@ -225,6 +231,12 @@ export function buildWorkLogProperties(
     [s.priority]: select(record.priority),
     [s.summary]: richText(buildWorkLogSummaryText(record)),
     [s.invoiceDescription]: richText(record.invoiceDescription),
+    [s.clientVisible]: checkbox(record.clientVisible),
+    [s.includeInInvoice]: checkbox(record.includeInInvoice),
+    [s.includeInWorkReport]: checkbox(record.includeInWorkReport),
+    [s.detailedWorkDescription]: richText(record.detailedWorkDescription),
+    [s.internalNotes]: richText(record.internalNotes),
+    [s.evidenceLinks]: richText(record.evidenceLinks.join("\n")),
     [MIGRATION_KEY_PROPERTY_NAME]: richText(migrationKey),
   };
   if (projectPageId) props[PROJECT_RELATION_PROPERTY_NAME] = relation([projectPageId]);

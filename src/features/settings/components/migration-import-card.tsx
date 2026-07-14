@@ -20,7 +20,7 @@ export function MigrationImportCard() {
           Historical Notion Import
         </CardTitle>
         <CardDescription>
-          One-time, narrowly scoped write of the approved July 8-9 historical records to Notion,
+          One-time, narrowly scoped write of the corrected July 8-10 v2 historical records to Notion,
           with duplicate protection. Requires a typed confirmation phrase - never enables general
           sync.
         </CardDescription>

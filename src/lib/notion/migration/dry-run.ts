@@ -12,11 +12,10 @@
  * See read-existing.ts (the only file in this feature that touches SQLite,
  * read-only) and src/app/api/notion/migration-preview/route.ts.
  *
- * Billing convention (2026-07-10 approved decision): amounts are computed
+ * Corrected billing convention: amounts are computed
  * from exact elapsed minutes (exactMinutes/60 x hourlyRate), never from
  * hours pre-rounded to hundredths, and only the final dollar total is
- * rounded to cents. This keeps the recalculated total at $311.00, matching
- * the historical Hours Worked page. See buildTotals() and
+ * rounded to cents. This produces 987 billable minutes and $493.50. See buildTotals() and
  * ProposedHoursRecord.referenceAppRoundedHours/Amount in types.ts for the
  * (rejected, informational-only) alternative convention this replaced.
  *
@@ -68,6 +67,8 @@ const PROJECT_CANDIDATES: ProjectCandidate<ProjectKey>[] = [
       "power automate support",
     ],
   },
+  { key: "invoiceWorkspace", keywords: ["invoice", "work tracking", "work logging"] },
+  { key: "digitalSystemsAudit", keywords: ["digital systems", "systems scope"] },
 ];
 
 const PROJECT_DEFINITIONS: Record<
@@ -92,6 +93,26 @@ const PROJECT_DEFINITIONS: Record<
       'Technical documentation of the Power Automate BOL Review Process V2 flow (the "Power Automate Flow Map" Notion page) and related technical support work.',
     tags: ["documentation", "power-automate"],
   },
+  invoiceWorkspace: {
+    name: "AFP Invoice Workspace",
+    description:
+      "Structured AFP hours, work-log, invoice-ready summary, and maintenance-record workflow evidenced on the July 8 source page.",
+    tags: ["invoicing", "work-logs", "operations"],
+  },
+  digitalSystemsAudit: {
+    name: "Digital Systems Audit & Process Documentation",
+    description:
+      "Review and documentation of AFP systems, automations, websites, databases, platforms, access, security, and operational procedures evidenced on July 8.",
+    tags: ["systems-audit", "documentation", "operations"],
+  },
+};
+
+const PROJECT_SOURCE_KEYS: Record<ProjectKey, Array<"july8" | "july9" | "july10">> = {
+  bolReviewV2: ["july8", "july9", "july10"],
+  commandCenter: ["july8", "july9"],
+  powerAutomateDocs: ["july8", "july9"],
+  invoiceWorkspace: ["july8"],
+  digitalSystemsAudit: ["july8"],
 };
 
 function projectLabel(key: ProjectKey): string {
@@ -102,7 +123,7 @@ const WARNING_DEFS: Record<string, { severity: MigrationWarning["severity"]; mes
   "unassigned-project": {
     severity: "warning",
     message:
-      "Session workstream text doesn't match any of the three derived projects and no explicit assignment was approved for it. Left project unassigned pending manual review rather than guessing.",
+      "Session workstream text does not match an evidenced project and has no reviewed assignment. It remains unassigned rather than guessed.",
   },
   "multi-project-session": {
     severity: "warning",
@@ -112,7 +133,7 @@ const WARNING_DEFS: Record<string, { severity: MigrationWarning["severity"]; mes
   "project-assignments-approved": {
     severity: "info",
     message:
-      "Project assignments for every historical session and work log below were explicitly reviewed and approved by the user on 2026-07-10, overriding the keyword-derived guesses from the initial dry run.",
+      "Project assignments are derived from the corrected Hours table and the dated source-page work descriptions, not from title-only guesses.",
   },
   "location-not-specified": {
     severity: "info",
@@ -122,7 +143,7 @@ const WARNING_DEFS: Record<string, { severity: MigrationWarning["severity"]; mes
   "billing-convention-approved": {
     severity: "info",
     message:
-      "Per the 2026-07-10 approved migration decision, amounts are computed from exact elapsed minutes (exactMinutes/60 x hourlyRate), rounding only the final dollar total to cents - not from hours pre-rounded to hundredths. This keeps the recalculated total at $311.00, matching the historical Hours Worked page. This app's default per-entry rounding convention (round hours to hundredths before multiplying by rate) was evaluated and would have produced $311.10 for this dataset (see totals.referenceAppConventionTotal and this row's referenceAppRoundedHours/referenceAppRoundedAmount) - that convention was explicitly rejected for this migration.",
+      "Amounts use exact elapsed minutes at $30/hour. This preserves the corrected 987-minute, $493.50 source total, including July 10's exact 350-minute $175.00 amount.",
   },
   "assumed-nonbillable-rate": {
     severity: "info",
@@ -131,7 +152,7 @@ const WARNING_DEFS: Record<string, { severity: MigrationWarning["severity"]; mes
   },
   "assumed-priority-default": {
     severity: "info",
-    message: 'Priority defaulted to "medium" - the source Work Done pages do not state a priority.',
+    message: 'Project priority defaults to "medium" because the historical source does not assign project-level priorities.',
   },
   "worklog-multi-project": {
     severity: "info",
@@ -147,11 +168,6 @@ const WARNING_DEFS: Record<string, { severity: MigrationWarning["severity"]; mes
     severity: "warning",
     message:
       'The July 9, 2026 page\'s own header states the session "Started at 9:00 AM" and was still open ("Confirmed Billable Time: Not finalized yet"), but the same page\'s later "End-of-Day Shift Update" section and the Hours Worked table both reconcile the same session as 9:12 AM-2:00 PM, closed. Treated the closed, reconciled figures as authoritative and flagged the header text as stale rather than silently picking one.',
-  },
-  "multiple-invoice-ready-blocks": {
-    severity: "info",
-    message:
-      'The July 9, 2026 page contains three separate "Invoice-Ready" description blocks (main, midday add-on, end-of-day), reflecting incremental updates through the day. Concatenated in source order for the proposed work log; confirm the combined wording reads correctly before invoicing.',
   },
   "untracked-time-gap": {
     severity: "info",
@@ -180,8 +196,7 @@ function buildClient(
     status: "active",
     defaultHourlyRate: STANDARD_HOURLY_RATE,
     timezone: SOURCE_TIMEZONE,
-    notes:
-      "Migrated from historical Notion pages 'Hours Worked' and 'Work Done' (AFP-Work > Invoice Details). See Phase 5 migration dry-run provenance.",
+    notes: "AFP contractor and digital systems work",
   };
   const exists = snapshot.clientNamesLower.includes(CLIENT_NAME.toLowerCase());
 
@@ -200,11 +215,10 @@ function buildClient(
 }
 
 function buildProjects(
-  usedKeys: Set<ProjectKey>,
+  _usedKeys: Set<ProjectKey>,
   snapshot: ExistingRecordsSnapshot,
 ): ProposedRecord<ProposedProjectRecord>[] {
   return (Object.keys(PROJECT_DEFINITIONS) as ProjectKey[])
-    .filter((key) => usedKeys.has(key))
     .map((key) => {
       const def = PROJECT_DEFINITIONS[key];
       const record: ProposedProjectRecord = {
@@ -221,10 +235,12 @@ function buildProjects(
         action: exists ? "skip-existing" : "create",
         existingMatchId: exists ? def.name.toLowerCase() : null,
         record,
-        provenance: [
-          { pageId: SOURCE_PAGES.hoursWorked.id, pageTitle: SOURCE_PAGES.hoursWorked.title, pageUrl: SOURCE_PAGES.hoursWorked.url },
-          { pageId: SOURCE_PAGES.july9.id, pageTitle: SOURCE_PAGES.july9.title, pageUrl: SOURCE_PAGES.july9.url },
-        ],
+        provenance: PROJECT_SOURCE_KEYS[key].map((sourceKey) => ({
+          pageId: SOURCE_PAGES[sourceKey].id,
+          pageTitle: SOURCE_PAGES[sourceKey].title,
+          pageUrl: SOURCE_PAGES[sourceKey].url,
+          section: "Work Completed / Work Log",
+        })),
         warnings: ["assumed-priority-default"],
       };
     });
@@ -338,22 +354,13 @@ function buildWorkLogs(
   };
 
   return RAW_WORK_LOGS.map((wl) => {
-    const approved = APPROVED_WORK_LOG_PROJECTS[wl.id] ?? { projectKey: null, relatedProjectKeys: [] };
+    const approved = APPROVED_WORK_LOG_PROJECTS[wl.id];
 
     const recordWarnings: string[] = [];
-    if (approved.projectKey === null && approved.relatedProjectKeys.length > 1) {
-      recordWarnings.push("worklog-multi-project");
-      addWarning("worklog-multi-project", wl.id);
-    } else if (approved.relatedProjectKeys.length > 0) {
+    if (approved.relatedProjectKeys.length > 0) {
       recordWarnings.push("worklog-related-projects-preserved");
       addWarning("worklog-related-projects-preserved", wl.id);
     }
-    if (wl.invoiceReadyBlocks.length > 1) {
-      recordWarnings.push("multiple-invoice-ready-blocks");
-      addWarning("multiple-invoice-ready-blocks", wl.id);
-    }
-    recordWarnings.push("assumed-priority-default");
-    addWarning("assumed-priority-default", wl.id);
 
     const relatedProjectsNote = approved.projectKey
       ? approved.relatedProjectKeys.length > 0
@@ -362,20 +369,25 @@ function buildWorkLogs(
           `2026-07-10 approved migration decision even though the day's billable session(s) are ` +
           `attributed to ${projectLabel(approved.projectKey)}.`
         : `Primary project: ${projectLabel(approved.projectKey)}.`
-      : approved.relatedProjectKeys.length > 0
-        ? `No single main project specified for this day - its billable sessions were individually ` +
-          `approved to ${approved.relatedProjectKeys.map(projectLabel).join(", ")}. See each hours row's ` +
-          `own project assignment for the breakdown.`
-        : "";
+      : "";
+
+    const sourceKey = wl.date === "2026-07-08" ? "july8" : wl.date === "2026-07-09" ? "july9" : "july10";
+    const source = SOURCE_PAGES[sourceKey];
 
     const record: ProposedWorkLogRecord = {
       title: wl.title,
       date: wl.date,
       status: "done",
-      priority: "medium",
+      priority: wl.priority,
       summary: wl.summary,
-      detailedSourceReference: `${SOURCE_PAGES[wl.date === "2026-07-08" ? "july8" : "july9"].url} - see Work Completed, Testing/Verification, Technical Notes, Blockers, and Files/Evidence sections.`,
-      invoiceDescription: wl.invoiceReadyBlocks.join("\n\n"),
+      detailedWorkDescription: wl.detailedWorkDescription,
+      detailedSourceReference: `${source.url} - dated source work log and invoice-ready section.`,
+      invoiceDescription: wl.invoiceDescription,
+      internalNotes: wl.internalNotes,
+      evidenceLinks: [...wl.evidenceLinks],
+      clientVisible: true,
+      includeInInvoice: true,
+      includeInWorkReport: true,
       clientName: CLIENT_NAME,
       projectKey: approved.projectKey,
       relatedProjectKeys: approved.relatedProjectKeys,
@@ -393,9 +405,9 @@ function buildWorkLogs(
       record,
       provenance: [
         {
-          pageId: SOURCE_PAGES[wl.date === "2026-07-08" ? "july8" : "july9"].id,
-          pageTitle: SOURCE_PAGES[wl.date === "2026-07-08" ? "july8" : "july9"].title,
-          pageUrl: SOURCE_PAGES[wl.date === "2026-07-08" ? "july8" : "july9"].url,
+          pageId: source.id,
+          pageTitle: source.title,
+          pageUrl: source.url,
           section: "Invoice-Ready Work Description",
         },
       ],
@@ -432,6 +444,12 @@ function buildTotals(proposedHours: ProposedRecord<ProposedHoursRecord>[]): Reco
 
   const totalBillableHours = roundHours(billableSessions.reduce((sum, s) => sum + s.hours, 0));
   const totalNonBillableHours = roundHours(nonBillableSessions.reduce((sum, s) => sum + s.hours, 0));
+  const totalBillableMinutes = proposedHours
+    .filter((h) => h.record.billable)
+    .reduce((sum, h) => sum + Math.round(h.record.totalHours * 60), 0);
+  const totalNonBillableMinutes = proposedHours
+    .filter((h) => !h.record.billable)
+    .reduce((sum, h) => sum + Math.round(h.record.totalHours * 60), 0);
   // Billing convention (2026-07-10 approved): sum exact hours x rate across
   // every billable session first, round ONLY this final total to cents.
   const totalInvoiceAmount = roundCents(
@@ -475,6 +493,8 @@ function buildTotals(proposedHours: ProposedRecord<ProposedHoursRecord>[]): Reco
   }
 
   return {
+    totalBillableMinutes,
+    totalNonBillableMinutes,
     totalBillableHours,
     totalNonBillableHours,
     totalInvoiceAmount,
@@ -545,7 +565,7 @@ export function buildMigrationDryRun(
   ].filter((x): x is { type: string; syntheticId: string; reason: string } => x !== null);
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt: opts.generatedAt ?? new Date().toISOString(),
     writesPerformed: false,
     notionWritesPerformed: false,

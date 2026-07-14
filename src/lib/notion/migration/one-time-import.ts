@@ -20,6 +20,7 @@
  */
 import { nanoid } from "nanoid";
 import {
+  MIGRATION_NAMESPACE,
   clientMigrationKey,
   hoursMigrationKey,
   projectMigrationKey,
@@ -43,18 +44,20 @@ import {
 import { buildMigrationDryRun } from "./dry-run";
 import { EMPTY_SNAPSHOT, type MigrationDryRunResult, type ProjectKey } from "./types";
 
-export const IMPORT_CONFIRMATION_PHRASE = "IMPORT AFP JULY 8-9";
+export const IMPORT_CONFIRMATION_PHRASE = "IMPORT AFP JULY 8-10 V2";
 
 export function isValidConfirmationPhrase(input: unknown): boolean {
   return typeof input === "string" && input === IMPORT_CONFIRMATION_PHRASE;
 }
 
 const EXPECTED_TOTALS = {
-  billableHours: 10.37,
+  billableMinutes: 987,
+  billableHours: 16.45,
+  nonBillableMinutes: 120,
   nonBillableHours: 2,
-  invoiceAmount: 311,
+  invoiceAmount: 493.5,
 };
-const EXPECTED_COUNTS = { client: 1, projects: 3, hours: 5, workLogs: 2 };
+const EXPECTED_COUNTS = { client: 1, projects: 5, hours: 5, workLogs: 3 };
 
 // ---------------------------------------------------------------------------
 // Injected Notion client surface. Structurally compatible with the real
@@ -197,6 +200,57 @@ export function allExpectedMigrationKeys(dryRun: MigrationDryRunResult): Record<
   };
 }
 
+/**
+ * Hard stop for every known stale-fixture failure mode. runPreflight invokes
+ * this before any live schema lookup and runImport cannot bypass preflight.
+ */
+export function correctedDatasetChecks(dryRun: MigrationDryRunResult): PreflightCheck[] {
+  const hours = dryRun.proposedHours;
+  const workLogs = dryRun.proposedWorkLogs;
+  const allKeys = Object.values(allExpectedMigrationKeys(dryRun)).flat();
+  const hasJuly10Hours = hours.some((row) => row.record.date === "2026-07-10");
+  const hasJuly10WorkLog = workLogs.some((row) => row.record.date === "2026-07-10");
+  const hasCorrectedAfternoon = hours.some(
+    (row) => row.record.date === "2026-07-08" && row.record.startTime === "14:00" && row.record.endTime === "17:49",
+  );
+  const hasObsoleteSplit = hours.some(
+    (row) => row.record.date === "2026-07-08" &&
+      ((row.record.startTime === "14:05" && row.record.endTime === "17:00") ||
+        (row.record.startTime === "17:10" && row.record.endTime === "17:49")),
+  );
+  const usesOnlyV2Namespace = allKeys.length > 0 && allKeys.every(
+    (key) => key.startsWith(`${MIGRATION_NAMESPACE}-`) && !key.endsWith("-v1") && !key.includes("afp-client-v1"),
+  );
+
+  return [
+    {
+      code: "obsolete-311-fixture-rejected",
+      passed: dryRun.totals.totalInvoiceAmount !== 311 && dryRun.totals.totalInvoiceAmount === EXPECTED_TOTALS.invoiceAmount,
+      message: `Corrected invoice total must be $493.50 and must never be the obsolete $311.00 value; received $${dryRun.totals.totalInvoiceAmount.toFixed(2)}.`,
+    },
+    {
+      code: "july-10-required",
+      passed: hasJuly10Hours && hasJuly10WorkLog,
+      message: "Corrected data requires both the July 10 Hours row and July 10 Work Done row.",
+    },
+    {
+      code: "continuous-july-8-afternoon-required",
+      passed: hasCorrectedAfternoon && !hasObsoleteSplit,
+      message: "July 8 afternoon must be one continuous 14:00-17:49 row; obsolete split rows are forbidden.",
+    },
+    {
+      code: "three-worklogs-required",
+      passed: workLogs.length === EXPECTED_COUNTS.workLogs,
+      message: `Corrected data requires exactly ${EXPECTED_COUNTS.workLogs} Work Done rows; received ${workLogs.length}.`,
+    },
+    {
+      code: "v2-migration-namespace-required",
+      passed: usesOnlyV2Namespace,
+      message: `Every corrected migration key must use the ${MIGRATION_NAMESPACE} namespace; v1 keys are forbidden.`,
+    },
+  ];
+}
+
 async function findExistingByMigrationKeys(
   notion: NotionWriteClient,
   dataSourceId: string,
@@ -234,11 +288,21 @@ export async function runPreflight(input: PreflightInput): Promise<PreflightRepo
 
   push("api-key-configured", input.notion !== null, "NOTION_API_KEY must be configured.");
   push(
+    "billable-minutes-total",
+    dryRun.totals.totalBillableMinutes === EXPECTED_TOTALS.billableMinutes,
+    `Dry-run billable minutes: ${dryRun.totals.totalBillableMinutes} (expected ${EXPECTED_TOTALS.billableMinutes}).`,
+  );
+  push(
     "sync-disabled",
     input.syncEnabled === false,
     input.syncEnabled
       ? "NOTION_SYNC_ENABLED=true - this one-time import is intentionally scoped to run only while general live sync stays disabled, so a general push/pull can never interleave with this narrowly-scoped write. Set NOTION_SYNC_ENABLED=false and retry."
       : "NOTION_SYNC_ENABLED=false, as required.",
+  );
+  push(
+    "non-billable-minutes-total",
+    dryRun.totals.totalNonBillableMinutes === EXPECTED_TOTALS.nonBillableMinutes,
+    `Dry-run non-billable minutes: ${dryRun.totals.totalNonBillableMinutes} (expected ${EXPECTED_TOTALS.nonBillableMinutes}).`,
   );
   push(
     "all-databases-ready",
@@ -252,6 +316,7 @@ export async function runPreflight(input: PreflightInput): Promise<PreflightRepo
     dryRun.totals.totalBillableHours === EXPECTED_TOTALS.billableHours,
     `Dry-run billable hours: ${dryRun.totals.totalBillableHours} (expected ${EXPECTED_TOTALS.billableHours}).`,
   );
+  checks.push(...correctedDatasetChecks(dryRun));
   push(
     "non-billable-hours-total",
     dryRun.totals.totalNonBillableHours === EXPECTED_TOTALS.nonBillableHours,

@@ -5,7 +5,12 @@
  * (never writes) local SQLite for duplicate detection.
  */
 
-export type ProjectKey = "bolReviewV2" | "commandCenter" | "powerAutomateDocs";
+export type ProjectKey =
+  | "bolReviewV2"
+  | "commandCenter"
+  | "powerAutomateDocs"
+  | "invoiceWorkspace"
+  | "digitalSystemsAudit";
 
 /** Points back at the exact live Notion page a proposed value was read from. */
 export interface SourceProvenance {
@@ -99,8 +104,14 @@ export interface ProposedWorkLogRecord {
   status: "not-started" | "in-progress" | "blocked" | "done";
   priority: "low" | "medium" | "high" | "urgent";
   summary: string;
+  detailedWorkDescription: string;
   detailedSourceReference: string;
   invoiceDescription: string;
+  internalNotes: string;
+  evidenceLinks: string[];
+  clientVisible: true;
+  includeInInvoice: true;
+  includeInWorkReport: true;
   clientName: string;
   /** Main/primary project, per approved assignment. */
   projectKey: ProjectKey | null;
@@ -130,9 +141,11 @@ export interface SessionTotal {
 }
 
 export interface ReconciliationTotals {
+  totalBillableMinutes: number;
+  totalNonBillableMinutes: number;
   totalBillableHours: number;
   totalNonBillableHours: number;
-  /** Sum of exact (unrounded) per-session hours x rate, rounded only once, at the total. Must equal $311.00 for this dataset. */
+  /** Sum of exact-minute session amounts. Must equal $493.50 for this dataset. */
   totalInvoiceAmount: number;
   perDay: DayTotals[];
   perSession: SessionTotal[];
@@ -154,7 +167,7 @@ export interface ReconciliationTotals {
 }
 
 export interface MigrationDryRunResult {
-  schemaVersion: 2;
+  schemaVersion: 3;
   generatedAt: string;
   writesPerformed: false;
   notionWritesPerformed: false;

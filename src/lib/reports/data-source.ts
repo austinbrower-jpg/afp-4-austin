@@ -29,50 +29,62 @@ const HISTORICAL_PROJECTS = {
     id: "historical-power-automate-docs",
     name: "Power Automate Documentation",
   },
+  invoiceWorkspace: {
+    id: "historical-afp-invoice-workspace",
+    name: "AFP Invoice Workspace",
+  },
+  digitalSystemsAudit: {
+    id: "historical-digital-systems-audit",
+    name: "Digital Systems Audit & Process Documentation",
+  },
 } as const;
 
 function evidenceForWorkLog(id: string): string[] {
-  return [id === "wl-2026-07-08" ? SOURCE_PAGES.july8.url : SOURCE_PAGES.july9.url];
+  if (id === "wl-2026-07-08") return [SOURCE_PAGES.july8.url, SOURCE_PAGES.hoursWorked.url];
+  if (id === "wl-2026-07-09") return [SOURCE_PAGES.july9.url, SOURCE_PAGES.hoursWorked.url];
+  return [SOURCE_PAGES.july10.url, SOURCE_PAGES.hoursWorked.url];
 }
 
 function historicalDeliverables(id: string): string[] {
-  return id === "wl-2026-07-08"
-    ? [
-        "Reviewed and documented the BOL Review Process V2 workflow.",
-        "Established structured work and invoice documentation.",
-        "Prepared the AFP website rebuild workflow plan.",
-      ]
-    : [
-        "Added workbook reporting and status fields.",
-        "Created the dedicated Unmatched validation path and row mappings.",
-        "Enabled sequential trigger concurrency control for batch processing.",
-        "Built vendor review tabs and corrected reporting formulas.",
-      ];
+  if (id === "wl-2026-07-08") return [
+    "Reviewed and documented the BOL Review Process V2 workflow.",
+    "Established structured work and invoice documentation.",
+    "Prepared AFP website and operations planning.",
+  ];
+  if (id === "wl-2026-07-09") return [
+    "Added workbook reporting and status fields.",
+    "Created the Unmatched validation path and sequential batch controls.",
+    "Built vendor review tabs and the Command Center plan.",
+  ];
+  return [
+    "Redesigned Pending cleanup with unique row identifiers.",
+    "Added Sheet1 and pre-Pending duplicate prevention.",
+    "Corrected fuel classification in the extraction prompt.",
+  ];
 }
 
 function historicalTesting(id: string): string[] {
-  return id === "wl-2026-07-08"
-    ? ["Tested BOL and invoice extraction behavior against expected values."]
-    : [
-        "Confirmed incomplete documents route to Unmatched.",
-        "Verified batch routing across Sheet1, Pending, and Unmatched outputs.",
-        "Verified vendor-filtered workbook outputs.",
-      ];
+  if (id === "wl-2026-07-08") return ["Tested BOL and invoice extraction behavior against expected values."];
+  if (id === "wl-2026-07-09") return [
+    "Confirmed incomplete documents route to Unmatched.",
+    "Verified batch routing and vendor-filtered workbook outputs.",
+  ];
+  return ["Stress-tested repeat uploads and reconciled a 49-document batch across workbook outputs."];
 }
 
 function historicalBlockers(id: string): string[] {
-  return id === "wl-2026-07-08"
-    ? ["Anthropic API credit limits blocked additional extraction testing."]
-    : ["Incomplete AI output caused a Parse JSON failure; a low-token troubleshooting path was prepared."];
+  if (id === "wl-2026-07-08") return ["Anthropic API credit limits blocked additional extraction testing."];
+  if (id === "wl-2026-07-09") return ["Incomplete AI output required a safe Parse JSON troubleshooting path."];
+  return ["Kendrick and Phillips 66 classification/number edge cases remained for follow-up."];
 }
 
 function historicalFollowUps(id: string): string[] {
-  return id === "wl-2026-07-08"
-    ? ["Continue the website rebuild and automation documentation plan."]
-    : ["Evaluate multi-page PDF support and future delete-sync behavior."];
+  if (id === "wl-2026-07-08") return ["Continue the website rebuild and automation documentation plan."];
+  if (id === "wl-2026-07-09") return ["Evaluate multi-page PDF support and future delete-sync behavior."];
+  return ["Complete the remaining document-classification edge-case validation."];
 }
 
-function buildHistoricalDataset(): ReportDataset {
+export function buildHistoricalDataset(): ReportDataset {
   const workRecords: ReportWorkRecord[] = RAW_WORK_LOGS.map((work) => {
     const approved = APPROVED_WORK_LOG_PROJECTS[work.id];
     return {
@@ -82,13 +94,13 @@ function buildHistoricalDataset(): ReportDataset {
       date: work.date,
       title: work.title,
       summary: work.summary,
-      detailedWorkDescription: work.invoiceReadyBlocks.join("\n\n"),
-      internalNotes: "",
+      detailedWorkDescription: work.detailedWorkDescription,
+      internalNotes: work.internalNotes,
       status: "done",
       clientVisible: true,
       includeInInvoice: true,
       includeInWorkReport: true,
-      evidenceLinks: evidenceForWorkLog(work.id),
+      evidenceLinks: [...work.evidenceLinks],
       relatedHoursIds: [...work.relatedHoursIds],
       deliverables: historicalDeliverables(work.id),
       testingPerformed: historicalTesting(work.id),
@@ -110,7 +122,7 @@ function buildHistoricalDataset(): ReportDataset {
   return {
     source: "historical-preview",
     label: "Historical preview data",
-    description: "Approved read-only July 8–9, 2026 AFP preview; no import is required.",
+    description: "Corrected read-only July 8–10, 2026 AFP preview; no import is required.",
     clients: [{ id: HISTORICAL_CLIENT_ID, name: CLIENT_NAME, defaultHourlyRate: STANDARD_HOURLY_RATE }],
     projects: Object.values(HISTORICAL_PROJECTS).map((project) => ({
       ...project,
@@ -215,6 +227,7 @@ async function buildStoredDataset(provider: AppDataProvider): Promise<ReportData
       id: entry.id,
       clientId: entry.clientId,
       projectId: entry.projectId,
+      migrationKey: entry.externalId ?? null,
       date: entry.date,
       startTime: entry.startTime,
       endTime: entry.endTime,

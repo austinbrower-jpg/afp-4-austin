@@ -14,6 +14,7 @@ import {
 import { serializeReportHtml, serializeReportJson, serializeReportMarkdown } from "./serializers";
 import { PROPOSED_NOTION_REPORT_FIELDS } from "./schema-proposal";
 import { DEFAULT_REPORT_SETTINGS, type ReportBuilderInput, type ReportDataset } from "./types";
+import { QUARANTINE_DIAGNOSTIC_REASON } from "@/lib/quarantine";
 
 const INTERNAL_SECRET = "INTERNAL-ONLY: rotate production credentials";
 
@@ -33,9 +34,10 @@ function fixture(): ReportDataset {
     hours: [
       { id: "onsite", clientId: "afp", projectId: null, date: "2026-07-08", startTime: "09:00", endTime: "11:00", breakMinutes: 0, hourlyRate: 30, billable: false, relatedWorkLogId: "w8" },
       { id: "s1", clientId: "afp", projectId: "bol", date: "2026-07-08", startTime: "11:00", endTime: "13:00", breakMinutes: 0, hourlyRate: 30, billable: true, relatedWorkLogId: "w8" },
-      { id: "s2", clientId: "afp", projectId: "docs", date: "2026-07-08", startTime: "14:05", endTime: "17:00", breakMinutes: 0, hourlyRate: 30, billable: true, relatedWorkLogId: "w8" },
-      { id: "s3", clientId: "afp", projectId: "docs", date: "2026-07-08", startTime: "17:10", endTime: "17:49", breakMinutes: 0, hourlyRate: 30, billable: true, relatedWorkLogId: "w8" },
+      { id: "s2", clientId: "afp", projectId: "docs", date: "2026-07-08", startTime: "14:00", endTime: "17:49", breakMinutes: 0, hourlyRate: 30, billable: true, relatedWorkLogId: "w8" },
+      { id: "superseded", clientId: "afp", projectId: "docs", migrationKey: "afp-history-v2-superseded-hours-2026-07-08-1710-1749", date: "2026-07-08", startTime: "17:10", endTime: "17:49", breakMinutes: 0, hourlyRate: 30, billable: true, relatedWorkLogId: "w8" },
       { id: "s4", clientId: "afp", projectId: "bol", date: "2026-07-09", startTime: "09:12", endTime: "14:00", breakMinutes: 0, hourlyRate: 30, billable: true, relatedWorkLogId: "w9" },
+      { id: "s5", clientId: "afp", projectId: "bol", date: "2026-07-10", startTime: "08:40", endTime: "14:30", breakMinutes: 0, hourlyRate: 30, billable: true, relatedWorkLogId: "w10" },
       { id: "other-hours", clientId: "other", projectId: null, date: "2026-07-09", startTime: "09:00", endTime: "10:00", breakMinutes: 0, hourlyRate: 100, billable: true, relatedWorkLogId: null },
     ],
     workRecords: [
@@ -43,7 +45,7 @@ function fixture(): ReportDataset {
         id: "w8", clientId: "afp", projectId: null, date: "2026-07-08", title: "July 8 work", summary: "Summary 8",
         detailedWorkDescription: "Reviewed, tested, and documented the automation workflow.", internalNotes: INTERNAL_SECRET,
         status: "done", clientVisible: true, includeInInvoice: true, includeInWorkReport: true,
-        evidenceLinks: ["https://example.com/evidence"], relatedHoursIds: ["onsite", "s1", "s2", "s3"],
+        evidenceLinks: ["https://example.com/evidence"], relatedHoursIds: ["onsite", "s1", "s2"],
         deliverables: ["Workflow documentation"], testingPerformed: ["Extraction verification"], blockers: ["API credit limit"], followUpItems: ["Continue validation"],
       },
       {
@@ -51,6 +53,12 @@ function fixture(): ReportDataset {
         detailedWorkDescription: "Implemented routing and concurrency improvements.", internalNotes: INTERNAL_SECRET,
         status: "done", clientVisible: true, includeInInvoice: true, includeInWorkReport: true,
         evidenceLinks: [], relatedHoursIds: ["s4"], deliverables: ["Unmatched route"], testingPerformed: ["Batch routing"], blockers: [], followUpItems: [],
+      },
+      {
+        id: "w10", clientId: "afp", projectId: "bol", date: "2026-07-10", title: "July 10 work", summary: "Summary 10",
+        detailedWorkDescription: "Redesigned duplicate prevention and corrected extraction classification.", internalNotes: INTERNAL_SECRET,
+        status: "done", clientVisible: true, includeInInvoice: true, includeInWorkReport: true,
+        evidenceLinks: ["https://example.com/july-10"], relatedHoursIds: ["s5"], deliverables: ["Duplicate prevention"], testingPerformed: ["49-document reconciliation"], blockers: [], followUpItems: [],
       },
     ],
     knowledgeRecords: [{
@@ -65,7 +73,7 @@ function input(overrides: Partial<ReportBuilderInput> = {}): ReportBuilderInput 
     type: "simple-invoice",
     clientId: "afp",
     periodStart: "2026-07-08",
-    periodEnd: "2026-07-09",
+    periodEnd: "2026-07-10",
     projectIds: [],
     invoiceNumber: "AFP-2026-001",
     invoiceDate: "2026-07-10",
@@ -98,7 +106,7 @@ describe("report filtering", () => {
   });
 
   it("filters projects without including missing projects", () => {
-    expect(filterByProjects(fixture().hours, ["docs"]).map((row) => row.id)).toEqual(["s2", "s3"]);
+    expect(filterByProjects(fixture().hours, ["docs"]).map((row) => row.id)).toEqual(["s2", "superseded"]);
   });
 
   it("filters clients", () => {
@@ -138,11 +146,18 @@ describe("exact-minute billing", () => {
     expect(amountFromExactMinutes(1, 10)).toBe(0.17);
   });
 
-  it("preserves the approved historical $311.00 reconciliation", () => {
+  it("preserves the corrected historical $493.50 reconciliation", () => {
     const report = composeDetailedInvoice(fixture(), DEFAULT_REPORT_SETTINGS, input({ type: "detailed-invoice" }));
-    expect(report.totals.billableMinutes).toBe(622);
-    expect(report.totals.amountDue).toBe(311);
-    expect(report.sessions.map((line) => line.amount)).toEqual([60, 87.5, 19.5, 144]);
+    expect(report.totals.billableMinutes).toBe(987);
+    expect(report.totals.amountDue).toBe(493.5);
+    expect(report.sessions.map((line) => line.amount)).toEqual([60, 114.5, 144, 175]);
+  });
+
+  it("surfaces superseded rows as diagnostics without counting them toward totals", () => {
+    const report = composeDetailedInvoice(fixture(), DEFAULT_REPORT_SETTINGS, input({ type: "detailed-invoice" }));
+    expect(report.excludedRecords.some((record) => record.id === "superseded" && record.reason === QUARANTINE_DIAGNOSTIC_REASON)).toBe(true);
+    expect(report.sessions.every((session) => session.id !== "superseded")).toBe(true);
+    expect(report.totals.amountDue).toBe(493.5);
   });
 });
 
@@ -151,24 +166,27 @@ describe("invoice composition", () => {
     const report = composeSimpleInvoice(fixture(), DEFAULT_REPORT_SETTINGS, input());
     expect(report.type).toBe("simple-invoice");
     expect(report.projectTotals.map((row) => [row.label, row.amount])).toEqual([
-      ["BOL Review Process V2", 204],
-      ["Power Automate Documentation", 107],
+      ["BOL Review Process V2", 379],
+      ["Power Automate Documentation", 114.5],
     ]);
   });
 
   it("creates detailed line items and daily subtotals", () => {
     const report = composeDetailedInvoice(fixture(), DEFAULT_REPORT_SETTINGS, input());
     expect(report.sessions).toHaveLength(4);
+    expect(report.sessions.some((row) => row.id === "onsite")).toBe(false);
+    expect(report.totals.amountDue).toBe(493.5);
     expect(report.dailyTotals.map((row) => [row.label, row.amount])).toEqual([
-      ["2026-07-08", 167],
+      ["2026-07-08", 174.5],
       ["2026-07-09", 144],
+      ["2026-07-10", 175],
     ]);
   });
 
   it("honors project filters for a multi-project related work record", () => {
     const report = composeReport(fixture(), DEFAULT_REPORT_SETTINGS, input({ projectIds: ["docs"] }));
-    expect(report.sessions.map((line) => line.id)).toEqual(["s2", "s3"]);
-    expect(report.totals.amountDue).toBe(107);
+    expect(report.sessions.map((line) => line.id)).toEqual(["s2"]);
+    expect(report.totals.amountDue).toBe(114.5);
   });
 
   it("excludes missing descriptions with a useful reason", () => {
@@ -207,7 +225,8 @@ describe("invoice composition", () => {
 describe("work log report composition", () => {
   it("includes client-visible work, knowledge, evidence, deliverables, and verification", () => {
     const report = composeWorkLogReport(fixture(), DEFAULT_REPORT_SETTINGS, input({ type: "work-log-report" }));
-    expect(report.workItems).toHaveLength(2);
+    expect(report.workItems).toHaveLength(3);
+    expect(report.workItems.map((item) => item.date)).toEqual(["2026-07-08", "2026-07-09", "2026-07-10"]);
     expect(report.knowledgeItems).toHaveLength(1);
     expect(report.workItems[0].deliverables).toContain("Workflow documentation");
     expect(report.workItems[0].testingPerformed).toContain("Extraction verification");
@@ -216,9 +235,10 @@ describe("work log report composition", () => {
 
   it("reports billable and non-billable time separately", () => {
     const report = composeWorkLogReport(fixture(), DEFAULT_REPORT_SETTINGS, input());
-    expect(report.totals.billableMinutes).toBe(622);
+    expect(report.totals.billableMinutes).toBe(987);
     expect(report.totals.nonBillableMinutes).toBe(120);
-    expect(report.dailyTotals[0].exactMinutes).toBe(454);
+    expect(report.dailyTotals[0].exactMinutes).toBe(469);
+    expect(report.excludedRecords.some((record) => record.id === "superseded" && record.reason === QUARANTINE_DIAGNOSTIC_REASON)).toBe(true);
   });
 });
 
@@ -241,13 +261,15 @@ describe("immutability and deterministic safe exports", () => {
   it("serializes Markdown with invoice totals", () => {
     const markdown = serializeReportMarkdown(composeReport(fixture(), DEFAULT_REPORT_SETTINGS, input()));
     expect(markdown).toContain("# Invoice");
-    expect(markdown).toContain("**Amount due:** $311.00");
+    expect(markdown).toContain("**Amount due:** $493.50");
+    expect(markdown).not.toContain(INTERNAL_SECRET);
   });
 
   it("serializes stable JSON audit output", () => {
     const json = serializeReportJson(composeReport(fixture(), DEFAULT_REPORT_SETTINGS, input()));
-    expect(JSON.parse(json).totals.amountDue).toBe(311);
+    expect(JSON.parse(json).totals.amountDue).toBe(493.5);
     expect(json).toBe(serializeReportJson(composeReport(fixture(), DEFAULT_REPORT_SETTINGS, input())));
+    expect(json).not.toContain(INTERNAL_SECRET);
   });
 
   it("never exposes internal notes in Markdown, HTML, or JSON", () => {

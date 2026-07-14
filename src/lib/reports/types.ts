@@ -18,6 +18,7 @@ export interface ReportHoursRecord {
   id: string;
   clientId: string;
   projectId: string | null;
+  migrationKey?: string | null;
   date: string;
   startTime: string;
   endTime: string;
@@ -221,4 +222,3 @@ export const DEFAULT_REPORT_SETTINGS: ReportSettings = {
   clientBillingContact: "",
   clientBillingEmail: "",
 };
-

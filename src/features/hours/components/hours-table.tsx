@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatHours } from "@/lib/calculations";
+import { isSupersededMigrationKey, QUARANTINE_BADGE_LABEL } from "@/lib/quarantine";
 import type { HoursEntryWithRelations } from "../lib/types";
 
 function formatDate(date: string): string {
@@ -83,9 +84,16 @@ export function HoursTable({
                 <TableCell className="font-medium">{formatHours(entry.totalHours)}</TableCell>
                 <TableCell>{formatCurrency(entry.hourlyRate)}/hr</TableCell>
                 <TableCell>
-                  <Badge variant={entry.billable ? "default" : "secondary"}>
-                    {entry.billable ? "Billable" : "Non-billable"}
-                  </Badge>
+                  <div className="flex flex-col gap-1">
+                    <Badge variant={entry.billable ? "default" : "secondary"}>
+                      {entry.billable ? "Billable" : "Non-billable"}
+                    </Badge>
+                    {isSupersededMigrationKey(entry) && (
+                      <Badge variant="destructive" className="w-fit">
+                        {QUARANTINE_BADGE_LABEL}
+                      </Badge>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="max-w-40 truncate" title={entry.location || undefined}>
                   {entry.location || "—"}

@@ -62,7 +62,10 @@ lineAmount = roundToCents(exactMinutes / 60 × hourlyRate)
 invoiceTotal = sum(lineAmount)
 ```
 
-Overnight sessions are supported. The approved historical preview produces 622 billable minutes (10h 22m) and exactly **$311.00**.
+Overnight sessions are supported. The corrected historical preview produces
+987 billable minutes (16h 27m / 16.45 decimal hours), 120 non-billable
+minutes, and exactly **$493.50**. The obsolete `$311.00` July 8–9 fixture is
+unsafe and rejected by migration preflight.
 
 ## Data-source selection
 
@@ -71,7 +74,7 @@ Overnight sessions are supported. The approved historical preview produces 622 b
 | UI label | Contents |
 |---|---|
 | Notion data | Current Clients, Projects, Hours, Work Done, Knowledge, and Invoice Reports queried directly from Notion |
-| Historical preview data | Approved deterministic July 8–9 source transcription |
+| Historical preview data | Corrected deterministic July 8–10 source transcription |
 | Local mock data | SQLite development rows, available only when `APP_DATA_SOURCE=mock` |
 
 Notion mode never loads or mixes local mock rows. The deterministic historical preview remains separately selectable for reconciliation and is never imported. Empty sources and periods render a useful empty state.

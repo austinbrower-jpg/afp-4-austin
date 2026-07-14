@@ -1411,3 +1411,48 @@ No Notion write path was called. No source Hours, Work Done, Project, Client, In
 - Protected Preview `dpl_7qhnM8sxsYAvs93Ar159MXqw1Tq9` is Ready. Anonymous access redirects to Vercel SSO. Health reports Notion mode, SQLite disabled, and sync disabled. `/api/settings` returned 200 with `client: null`; report settings returned 200; read-only database verification returned Ready for all six databases.
 - Production `dpl_4vxS6DYo8pHGcf8et3Q21WD6P7Jo` is Ready and aliased to `https://afp-workspace-invoice.vercel.app`. Anonymous Settings/API access returns 401. Health reports Notion mode, SQLite disabled, `NOTION_SYNC_ENABLED=false`, Basic Auth, and no errors or warnings.
 - Verification issued only GET requests plus browser-local Settings storage. No Notion record, schema, source record, or environment variable was created or changed. The historical import was not run. No commit or push occurred.
+
+---
+
+## 2026-07-10 — Phase 10A: Corrected AFP historical migration dry run (Codex)
+
+### Corrected source and migration safety
+
+- Re-fetched the Hours Worked, Work Done, July 8, July 9, and July 10 legacy pages through the read-only Notion connector. No Notion mutation tool or import endpoint was called.
+- Replaced the obsolete July 8–9 `$311.00` fixture with five corrected Hours rows: 9:00–11:00 non-billable, 11:00–1:00 billable, continuous 2:00–5:49 billable, July 9 9:12–2:00 billable, and July 10 8:40–2:30 billable.
+- Corrected totals are 987 billable minutes (16h 27m / 16.45 hours), 120 non-billable minutes (2.00 hours), and `$493.50`.
+- Added exactly three source-derived Work Done proposals with title, date, done status, priority, project, summary, detailed description, invoice description, internal notes, evidence links, all three visibility/inclusion flags, related Hours, and provenance.
+- Added five source-evidenced project proposals: BOL Review Process V2, Power Automate Documentation, AFP Command Center / Sales & Operations Hub, AFP Invoice Workspace, and Digital Systems Audit & Process Documentation.
+- Replaced every v1 key with the `afp-history-v2` namespace and changed the confirmation phrase to `IMPORT AFP JULY 8-10 V2`.
+- Added active preflight refusals for `$311.00`, missing July 10, split July 8 afternoon rows, a Work Done count other than three, or any non-v2/v1 migration key.
+
+### Preview, reports, and tests
+
+- Updated the migration preview to expose all five source pages, client/project proposals, exact minutes and totals, migration keys, assignments, provenance, warnings, five Hours rows, three Work Done rows, and the existing “No writes performed” status.
+- Updated the historical report projection and report tests for a `$493.50` Simple Invoice, four billable Detailed Invoice sessions, excluded non-billable amount, all three dated Work Log entries, and internal-note exclusion.
+- Updated migration and report documentation to label `$311.00` and v1 as obsolete and unsafe.
+- Unit suite passes with 183 tests across 23 files; typecheck passes at this checkpoint. Full lint/build/browser verification follows in the final Phase 10A verification pass.
+- No import, Notion record/schema mutation, production environment change, commit, or push occurred.
+
+---
+
+## 2026-07-13 — Quarantine repair in authoritative repo
+
+- Confirmed the authoritative GitHub-connected repo is `/Volumes/Extra Memory/AFP-Work/Invoice/Invoice-4-Austin`; the temporary repo under `Claude_External/invoice-4-austin-tmp` has no Git remote and a different architecture.
+- Added a shared quarantine helper keyed off `afp-history-v2-superseded-` and threaded it through Hours totals, dashboard totals, invoice generation, report composition, and the Hours table badge.
+- Verified the live Notion-backed dataset in read-only mode: 6 Hours rows total, 1 superseded row, 3 Work Done rows, 3 visible Work Done rows, and live dashboard current invoice amount of `$493.50` with `BOL Review Process V2` as the active project.
+- Full verification completed successfully: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `git diff --check`.
+- No commit, push, deploy, or Notion write was performed.
+
+---
+
+## 2026-07-14 — Hours refresh fix in authoritative repo
+
+- Fixed the `/hours` refresh path so the top-bar Notion badge now explicitly refetches the active hours, dashboard, and runtime-status query scopes instead of only invalidating cache entries.
+- Added browser `no-store` API fetch defaults for the shared API client, tightened Hours query staleness to `0`, and kept the hours API route marked dynamic with `Cache-Control: no-store`.
+- Added safe production diagnostics for hours fetch success and failure, including row count, query range, source mode, and a timestamp on successful server fetches.
+- Improved the Notion badge UI with a spinner, disabled refresh state, toast success/error feedback, a persisted last-synced timestamp, and a visible fallback/local-data status line.
+- Added regression tests for no-store fetch behavior, structured API error parsing, and the explicit Notion refresh query scopes.
+- Verification completed: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `git diff --check` all passed.
+- Read-only live smoke verification was limited by the current local environment being `mock` mode; `/api/health` reported `dataSource: "mock"` and `notionConfigured: false`, so no live Notion fetch was possible from this machine.
+- No commit, push, deploy, or Notion write was performed.

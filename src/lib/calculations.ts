@@ -7,6 +7,7 @@ import {
   parseISO,
 } from "date-fns";
 import type { HoursEntry } from "@/types/domain";
+import { isQuarantinedRecord } from "@/lib/quarantine";
 
 /** Minutes between two HH:mm times, wrapping past midnight if end < start. */
 export function minutesBetween(startTime: string, endTime: string): number {
@@ -56,14 +57,14 @@ export function getMonthRange(date: Date = new Date()) {
 }
 
 export function sumHours(entries: HoursEntry[]): number {
-  return Math.round(entries.reduce((acc, e) => acc + e.totalHours, 0) * 100) / 100;
+  return Math.round(entries.reduce((acc, e) => acc + (isQuarantinedRecord(e) ? 0 : e.totalHours), 0) * 100) / 100;
 }
 
 export function sumBillableAmount(entries: HoursEntry[]): number {
   return (
     Math.round(
       entries.reduce(
-        (acc, e) => acc + (e.billable ? e.totalHours * e.hourlyRate : 0),
+        (acc, e) => acc + (!isQuarantinedRecord(e) && e.billable ? e.totalHours * e.hourlyRate : 0),
         0,
       ) * 100,
     ) / 100

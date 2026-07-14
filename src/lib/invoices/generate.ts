@@ -1,4 +1,5 @@
 import { formatCurrency, formatHours } from "@/lib/calculations";
+import { isQuarantinedRecord } from "@/lib/quarantine";
 import type { InvoiceLineItem, InvoiceReport, WorkLog } from "@/types/domain";
 
 /**
@@ -44,10 +45,11 @@ export function nextInvoiceNumber(
  */
 export function buildLineItems(
   worklogs: WorkLog[],
-  billableEntries: { date: string; totalHours: number }[],
+  billableEntries: { date: string; totalHours: number; externalId?: string | null; migrationKey?: string | null }[],
 ): InvoiceLineItem[] {
+  const billableRows = billableEntries.filter((entry) => !isQuarantinedRecord(entry));
   const hoursByDate = new Map<string, number>();
-  for (const e of billableEntries) {
+  for (const e of billableRows) {
     hoursByDate.set(e.date, (hoursByDate.get(e.date) ?? 0) + e.totalHours);
   }
   const worklogsByDate = new Map<string, WorkLog[]>();

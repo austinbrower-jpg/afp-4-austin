@@ -1,5 +1,14 @@
 # Migration plan: connecting existing Notion pages (not performed yet)
 
+> **Phase 10A correction (authoritative):** the earlier July 8–9 `$311.00`
+> fixture and every `*-v1` migration key are obsolete and unsafe to import.
+> The active preview/import path now requires the corrected July 8–10 dataset:
+> 5 Hours rows, 3 Work Done rows, 987 billable minutes (16.45 hours), 120
+> non-billable minutes, and `$493.50`, under the `afp-history-v2` namespace.
+> Preflight refuses `$311.00`, missing July 10, split July 8 afternoon rows,
+> two Work Done rows, or v1 keys. Historical text below describing v1 is
+> retained only as implementation history and is not approval to run it.
+
 This documents how to safely connect the app's six databases to your real
 Notion workspace, given the pages you already have:
 
@@ -234,7 +243,7 @@ this feature). UI: Settings → **Historical Notion Import**
 `src/lib/notion/sync-engine.ts`'s `pushEntity`/`pullDatabase`/`runFullSync`
 are gated by `NOTION_SYNC_ENABLED` and operate on whatever local SQLite rows
 exist at call time - general-purpose, ongoing, bidirectional. This import is
-none of those things: it is scoped to exactly 11 specific historical
+none of those things: it is scoped to exactly 14 specific historical
 records (from the Phase 5 dry run), runs once (idempotently - see rerun
 behavior below), and refuses to run at all while `NOTION_SYNC_ENABLED=true`
 (see "Preflight rules" below) so the two write paths can never interleave.
@@ -250,7 +259,7 @@ It shares no code with `sync-engine.ts` or `mappers.ts` - see
    written. Re-run anytime with **Re-check**.
 3. If any check fails, fix it (see "Preflight rules") and re-check. The
    confirmation step (4) stays locked until every check passes.
-4. **Step 2**: type the exact phrase `IMPORT AFP JULY 8-9` into the
+4. **Step 2**: type the exact phrase `IMPORT AFP JULY 8-10 V2` into the
    confirmation field. The **Import now** button stays disabled until the
    typed text matches exactly - there is no checkbox alternative and no way
    to submit with an empty or partial phrase.
@@ -271,10 +280,10 @@ Notion", never inferred from matching on name/date text. Computed by
 
 | Entity | Key formula | Example |
 |---|---|---|
-| Client | fixed | `afp-client-v1` |
-| Project | slug of project name | `afp-project-bol-review-process-v2-v1` |
-| Hours | date + start + end + billable + project | `afp-hours-2026-07-08-1100-1300-billable-bolReviewV2-v1` |
-| Work log | date + slug of title | `afp-worklog-2026-07-08-july-8-2026-v1` |
+| Client | fixed | `afp-history-v2-client` |
+| Project | namespace + project slug | `afp-history-v2-project-bol-review-process-v2` |
+| Hours | namespace + date + start + end + billable + project | `afp-history-v2-hours-2026-07-08-1100-1300-billable-bolReviewV2` |
+| Work log | namespace + date + title slug | `afp-history-v2-worklog-2026-07-10-july-10-2026-duplicate-prevention-and-extraction-reliability` |
 
 Before writing anything, the import queries each relevant database
 (read-only `dataSources.query`, filtered by these exact keys) for existing
@@ -303,11 +312,12 @@ databases are untouched - out of scope for this migration.
 
 1. **Client** (`Anytime Fuel Pros`)
 2. **Projects** (BOL Review Process V2, AFP Command Center / Sales &
-   Operations Hub, Power Automate Documentation, in that fixed order)
+   Operations Hub, Power Automate Documentation, AFP Invoice Workspace,
+   Digital Systems Audit & Process Documentation, in that fixed order)
 3. **Hours** (5 rows) - each row's `Project` relation points at the
    Notion page id resolved in step 2 (newly created this run, or an
    existing page matched by migration key)
-4. **Work logs** (2 rows) - same relation resolution; July 9's `Summary`
+4. **Work logs** (3 rows) - same relation resolution; related-project notes
    property additionally has its `relatedProjectsNote` appended (preserving
    the Command Center / Power Automate Documentation cross-reference in
    text, since the schema only supports one `Project` relation per row)
@@ -337,12 +347,15 @@ data) and simply completed by the next run, not undone.
 
 ### Verification checklist (before approving a real run)
 
-- [ ] Preflight shows **Ready** with all 10 checks passing, checked live
+- [ ] Preflight shows **Ready** with every check passing, checked live
       immediately before the report you're reviewing.
-- [ ] Proposed counts read exactly **1 client, 3 projects, 5 hours, 2 work
+- [ ] Proposed counts read exactly **1 client, 5 projects, 5 hours, 3 work
       logs**.
-- [ ] Totals read exactly **10.37 billable hours, 2.00 non-billable hours,
-      $311.00**.
+- [ ] Totals read exactly **987 billable minutes / 16.45 billable hours,
+      120 non-billable minutes / 2.00 non-billable hours, $493.50**.
+- [ ] July 8 afternoon is one continuous **2:00 PM–5:49 PM** row and July
+      10 is present in both Hours and Work Done.
+- [ ] Every migration key begins with `afp-history-v2-`; no v1 key is present.
 - [ ] The duplicate scan result is understood - either "no existing
       matches" (fresh run) or a specific, expected set of already-created
       records (an intentional rerun).
@@ -359,8 +372,8 @@ data) and simply completed by the next run, not undone.
 
 ### Exact records this import creates
 
-See the Phase 5 section above for the full table (client, 3 projects, 5
-hours rows, 2 work logs, and the approved project assignments / billing
+See the corrected Phase 10A preview for the full table (client, 5 projects,
+5 hours rows, 3 work logs, and the source-evidenced assignments / billing
 convention). This phase does not change what gets imported - only how it
 gets written, with duplicate protection.
 

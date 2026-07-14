@@ -38,11 +38,19 @@ import type {
   ProposedRecord,
   ProposedWorkLogRecord,
 } from "@/lib/notion/migration/types";
+import {
+  clientMigrationKey,
+  hoursMigrationKey,
+  projectMigrationKey,
+  workLogMigrationKey,
+} from "@/lib/notion/migration/write-keys";
 
 const PROJECT_LABELS: Record<string, string> = {
   bolReviewV2: "BOL Review Process V2",
   commandCenter: "AFP Command Center / Sales & Operations Hub",
   powerAutomateDocs: "Power Automate Documentation",
+  invoiceWorkspace: "AFP Invoice Workspace",
+  digitalSystemsAudit: "Digital Systems Audit & Process Documentation",
 };
 
 function ActionBadge({ action }: { action: MigrationAction }) {
@@ -112,7 +120,7 @@ export function MigrationPreviewView() {
             <CardHeader>
               <CardTitle>Source records</CardTitle>
               <CardDescription>
-                Read-only transcription of four live Notion pages. Generated{" "}
+                Read-only transcription of {data.sourcePages.length} live Notion pages. Generated{" "}
                 {formatDistanceToNow(new Date(data.generatedAt), { addSuffix: true })} - schema v
                 {data.schemaVersion}.
               </CardDescription>
@@ -151,10 +159,12 @@ export function MigrationPreviewView() {
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground">Billable hours</p>
                   <p className="text-lg font-semibold">{formatHours(data.totals.totalBillableHours)}</p>
+                  <p className="text-xs text-muted-foreground">{data.totals.totalBillableMinutes} minutes · 16h 27m</p>
                 </div>
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground">Non-billable hours</p>
                   <p className="text-lg font-semibold">{formatHours(data.totals.totalNonBillableHours)}</p>
+                  <p className="text-xs text-muted-foreground">{data.totals.totalNonBillableMinutes} minutes</p>
                 </div>
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground">Invoice amount</p>
@@ -242,6 +252,7 @@ export function MigrationPreviewView() {
                 {data.proposedClient.record.timezone} · {data.proposedClient.record.status}
               </p>
               <p className="text-xs text-muted-foreground">{data.proposedClient.record.notes}</p>
+              <p className="font-mono text-xs text-muted-foreground">{clientMigrationKey()}</p>
             </CardContent>
           </Card>
 
@@ -258,6 +269,8 @@ export function MigrationPreviewView() {
                     <ActionBadge action={p.action} />
                   </div>
                   <p className="text-xs text-muted-foreground">{p.record.description}</p>
+                  <p className="break-all font-mono text-xs text-muted-foreground">{projectMigrationKey(p.record.key)}</p>
+                  <p className="text-xs text-muted-foreground">Evidence: {p.provenance.map((source) => source.pageTitle).join(", ")}</p>
                 </div>
               ))}
             </CardContent>
@@ -350,6 +363,7 @@ function ProposedHoursCard({ rows }: { rows: ProposedRecord<ProposedHoursRecord>
                 <TableHead>Project</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Migration key / provenance</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -387,6 +401,10 @@ function ProposedHoursCard({ rows }: { rows: ProposedRecord<ProposedHoursRecord>
                     <TableCell>
                       <ActionBadge action={h.action} />
                     </TableCell>
+                    <TableCell className="max-w-72 text-xs text-muted-foreground">
+                      <p className="break-all font-mono">{hoursMigrationKey({ date: h.record.date, startTime: h.record.startTime, endTime: h.record.endTime, billable: h.record.billable, projectKey: h.record.projectKey })}</p>
+                      <p>{h.provenance.map((source) => source.pageTitle).join(", ")}</p>
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -403,7 +421,7 @@ function ProposedWorkLogsCard({ rows }: { rows: ProposedRecord<ProposedWorkLogRe
     <Card>
       <CardHeader>
         <CardTitle>Proposed work logs ({rows.length})</CardTitle>
-        <CardDescription>July 8 and July 9, with invoice-ready descriptions and related hours rows.</CardDescription>
+        <CardDescription>July 8, July 9, and July 10 with visibility flags and source provenance.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {rows.map((w) => (
@@ -421,6 +439,7 @@ function ProposedWorkLogsCard({ rows }: { rows: ProposedRecord<ProposedWorkLogRe
               </div>
             </div>
             <p className="text-sm text-muted-foreground">{w.record.summary}</p>
+            <p className="text-xs text-muted-foreground">{w.record.detailedWorkDescription}</p>
             {w.record.relatedProjectsNote && (
               <p className="text-xs text-muted-foreground italic">{w.record.relatedProjectsNote}</p>
             )}
@@ -433,6 +452,11 @@ function ProposedWorkLogsCard({ rows }: { rows: ProposedRecord<ProposedWorkLogRe
             <p className="text-xs text-muted-foreground">
               Related hours: {w.record.relatedHoursSyntheticIds.join(", ")}
             </p>
+            <p className="text-xs text-muted-foreground">Client Visible: true · Include in Invoice: true · Include in Work Report: true</p>
+            <p className="text-xs text-muted-foreground">Evidence: {w.record.evidenceLinks.join(", ")}</p>
+            <p className="text-xs text-muted-foreground">Internal notes (excluded from reports): {w.record.internalNotes}</p>
+            <p className="break-all font-mono text-xs text-muted-foreground">{workLogMigrationKey({ date: w.record.date, title: w.record.title })}</p>
+            <p className="text-xs text-muted-foreground">Provenance: {w.provenance.map((source) => `${source.pageTitle}${source.section ? ` — ${source.section}` : ""}`).join(", ")}</p>
             <a
               href={w.record.detailedSourceReference.split(" - ")[0]}
               target="_blank"

@@ -3,6 +3,7 @@ import { getDataProvider } from "@/lib/data/provider";
 import { newEntityBase } from "@/lib/data/entities";
 import { dataErrorResponse, NO_STORE_HEADERS } from "@/lib/data/route-utils";
 import { amountFromExactMinutes, exactElapsedMinutes, roundCurrency } from "@/lib/reports/engine";
+import { isQuarantinedRecord } from "@/lib/quarantine";
 import { buildLineItems, buildSummary, nextInvoiceNumber } from "@/lib/invoices/generate";
 import type { InvoiceReport } from "@/types/domain";
 
@@ -31,7 +32,8 @@ export async function POST(request: NextRequest) {
       provider.workspace(), provider.clients.list().then((rows) => rows[0]), provider.hours.list(), provider.workLogs.list(), provider.invoices.list(),
     ]);
     if (!workspace || !client) return NextResponse.json({ error: "No workspace/client configured." }, { status: 400 });
-    const billable = allHours.filter((entry) => entry.clientId === client.id && entry.billable && entry.date >= periodStart && entry.date <= periodEnd);
+    const operationalHours = allHours.filter((entry) => !isQuarantinedRecord(entry));
+    const billable = operationalHours.filter((entry) => entry.clientId === client.id && entry.billable && entry.date >= periodStart && entry.date <= periodEnd);
     const totalMinutes = billable.reduce((sum, entry) => sum + exactElapsedMinutes(entry.startTime, entry.endTime, entry.breakMinutes), 0);
     const totalAmount = roundCurrency(billable.reduce((sum, entry) => sum + amountFromExactMinutes(exactElapsedMinutes(entry.startTime, entry.endTime, entry.breakMinutes), entry.hourlyRate), 0));
     const workLogs = allWorkLogs.filter((entry) => entry.clientId === client.id && entry.date >= periodStart && entry.date <= periodEnd);

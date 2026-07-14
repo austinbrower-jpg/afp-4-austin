@@ -288,7 +288,7 @@ export function MigrationImportView() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Historical Notion Import</h1>
           <p className="text-muted-foreground">
-            One-time, narrowly scoped write of the approved July 8-9 historical records to live Notion, with
+            One-time, narrowly scoped write of the corrected July 8-10 v2 historical records to live Notion, with
             duplicate protection. Never enables general sync.
           </p>
         </div>

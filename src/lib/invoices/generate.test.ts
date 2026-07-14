@@ -114,6 +114,18 @@ describe("buildLineItems", () => {
     expect(items[0].hours).toBe(0);
   });
 
+  it("skips superseded billable rows when building line items", () => {
+    const logs = [worklog({ id: "a", date: "2026-06-01", title: "Fix bug", invoiceDescription: "Fixed the bug" })];
+    const items = buildLineItems(logs, [
+      { date: "2026-06-01", totalHours: 2.5, externalId: "afp-history-v2-superseded-hours-2026-06-01-0900-1100" },
+      { date: "2026-06-01", totalHours: 2.5, externalId: "afp-history-v2-hours-2026-06-01-1100-1300-billable-bol-review-process-v2-v2" },
+    ]);
+
+    expect(items).toEqual([
+      { workLogId: "a", title: "Fix bug", description: "Fixed the bug", hours: 2.5 },
+    ]);
+  });
+
   it("returns an empty list when there are no work logs", () => {
     expect(buildLineItems([], [{ date: "2026-06-01", totalHours: 5 }])).toEqual([]);
   });

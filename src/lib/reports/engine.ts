@@ -12,6 +12,7 @@ import type {
   ReportType,
   ReportWorkRecord,
 } from "./types";
+import { QUARANTINE_DIAGNOSTIC_REASON, isSupersededMigrationKey } from "@/lib/quarantine";
 
 export function roundCurrency(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -202,6 +203,15 @@ export function composeReport(
   for (const hours of [...hoursCandidates].sort(
     (a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime) || a.id.localeCompare(b.id),
   )) {
+    if (isSupersededMigrationKey(hours.migrationKey ?? null)) {
+      excludedRecords.push({
+        id: hours.id,
+        kind: "hours",
+        title: `${hours.date} ${hours.startTime}-${hours.endTime}`,
+        reason: QUARANTINE_DIAGNOSTIC_REASON,
+      });
+      continue;
+    }
     if (input.type !== "work-log-report" && !hours.billable) {
       excludedRecords.push({
         id: hours.id,
