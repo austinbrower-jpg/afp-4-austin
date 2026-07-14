@@ -1708,3 +1708,47 @@ Fixed a bug flagged during Phase 16 review: the "Historical preview data" datase
 - `npm test` — 301/301 pass (292 prior + 9 new)
 - `npm run build` — pass
 - `git diff --check` — pass
+
+## 2026-07-13 — Battle Bound Branding logo integration + asset cleanup (Claude Code)
+
+**AI model:** Claude Opus 4.8 (Claude Code)
+
+### Summary
+
+Wired the Battle Bound Branding logo into the existing Phase 16 branding system as the application-wide default, and cleaned up the unused source-asset bundle it arrived alongside. The requested path (`public/branding/battle-bound-branding-logo.png`) did not already exist - only ~30 unlabeled variants extracted from a zip under `public/branding/BBBLLC_WEB_IMAGE/`. Asked the user which variant to use; they chose the black icon-only "mark" (`bbb-mark-black-transparent-2000x2000.png`), copied byte-for-byte (verified by MD5) to the production path. No Notion writes, no invoice saves, no deployment.
+
+### Added
+
+- `src/lib/reports/logo.ts` — `resolveLogoDataUrl()` (fetches a same-origin logo path, converts to an embeddable data URL + natural dimensions via `FileReader`/`Image`; never throws, returns `null` on any failure) and `imageFormatFromDataUrl()` (maps a data URL's mime type to the format string jsPDF's `addImage()` expects)
+- `src/components/shared/brand-logo.tsx` — `<BrandLogo>` React component; `onError` hides the image so surrounding text branding remains the fallback, never a broken-image icon
+- `public/branding/battle-bound-branding-logo.png` — the production logo (36KB, 2000x2000, transparent)
+- `design-assets/branding/BBBLLC_WEB_IMAGE/` — the full original logo export bundle (lockups, marks, wordmarks, certification badges, black/white, PNG/SVG, original zips), moved out of `public/` since nothing in the app referenced it and it should not be publicly served
+- `design-assets/branding/README.md` — explains the source-asset folder's purpose and points back to the one file the app actually uses
+
+### Updated
+
+- `src/lib/reports/types.ts`, `src/lib/reports/settings.ts`, `src/app/api/report-settings/route.ts` — default `logoPath` is now `/branding/battle-bound-branding-logo.png` (no new environment variables)
+- `src/components/layout/app-sidebar.tsx` — sidebar brand mark now renders the logo, falling back to the existing Briefcase icon on load failure
+- `src/features/reports/components/report-preview.tsx`, `report-builder.tsx` — logo rendered via `<BrandLogo>` at ~48px height, `w-auto object-contain` (aspect ratio preserved, never stretched or cropped)
+- `src/features/reports/lib/export.ts`, `src/features/invoices/lib/export.ts` — PDF generators (`downloadReportPdf`, `downloadInvoicePdf`) are now `async`, resolve the logo to a data URL, and embed it with explicit format + `"MEDIUM"` compression - found and fixed a bug where uncompressed embedding of the 2000x2000 source turned a ~36KB PNG into a 16MB+ PDF; compressed embedding produces a ~47KB PDF
+- `src/features/reports/components/report-export-actions.tsx`, `src/features/invoices/components/invoice-export-actions.tsx` — updated to `await` the now-async export functions; failures are caught and toasted, never surfaced raw
+- `src/lib/reports/serializers.ts` — Print HTML / HTML download template gained a `.brand-logo` `<img>` in the identity header (48px height, `object-fit: contain`); `openPrintReport`/`downloadReportHtml` resolve the logo to a data URL first so exported/printed HTML is self-contained regardless of where it's opened
+
+### Moved
+
+- `public/branding/BBBLLC_WEB_IMAGE/` → `design-assets/branding/BBBLLC_WEB_IMAGE/` (unmodified - no recompression, renaming, or deletion of any original file; confirmed unreferenced by any application code, test, doc, or build process before moving)
+
+### Not performed
+
+- Live Notion writes of any kind
+- New environment variables
+- Invoice saves outside the existing gated Save Invoice to Notion flow
+- Production deployment
+- Modifying, recompressing, renaming, or deleting any original branding source file
+
+### Verification suite (local)
+
+- `npm run lint` — pass
+- `npm run typecheck` — pass
+- `npm test` — 301/301 pass
+- `npm run build` — pass

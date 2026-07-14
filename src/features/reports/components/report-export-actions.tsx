@@ -23,15 +23,35 @@ export function ReportExportActions({ report, onExport }: { report: ReportDocume
       toast.error("Clipboard access was not available");
     }
   };
-  const print = () => {
-    if (!openPrintReport(report)) toast.error("Allow pop-ups to open the print-friendly report");
-    else onExport?.();
+  const print = async () => {
+    try {
+      if (!(await openPrintReport(report))) toast.error("Allow pop-ups to open the print-friendly report");
+      else onExport?.();
+    } catch {
+      toast.error("Failed to open the print-friendly report");
+    }
+  };
+  const pdf = async () => {
+    try {
+      await downloadReportPdf(report);
+      onExport?.();
+    } catch {
+      toast.error("Failed to generate PDF");
+    }
+  };
+  const html = async () => {
+    try {
+      await downloadReportHtml(report);
+      onExport?.();
+    } catch {
+      toast.error("Failed to generate HTML file");
+    }
   };
   return (
     <div className="flex flex-wrap gap-2">
-      <Button size="sm" onClick={() => { downloadReportPdf(report); onExport?.(); }}><FileDown />PDF</Button>
+      <Button size="sm" onClick={pdf}><FileDown />PDF</Button>
       <Button size="sm" variant="outline" onClick={print}><Printer />Print HTML</Button>
-      <Button size="sm" variant="outline" onClick={() => { downloadReportHtml(report); onExport?.(); }}><FileCode2 />HTML</Button>
+      <Button size="sm" variant="outline" onClick={html}><FileCode2 />HTML</Button>
       <Button size="sm" variant="outline" onClick={() => { downloadReportMarkdown(report); onExport?.(); }}><Download />Markdown</Button>
       <Button size="sm" variant="outline" onClick={copy}><Copy />Copy</Button>
       <Button size="sm" variant="outline" onClick={() => { downloadReportJson(report); onExport?.(); }}><Download />JSON</Button>

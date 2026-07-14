@@ -8,6 +8,7 @@ import { apiGet } from "@/lib/api-client/http";
 import { composeReport } from "@/lib/reports/engine";
 import { resolveReportDataset } from "@/lib/reports/dataset-resolver";
 import { useBrowserReportSettings } from "@/features/reports/lib/browser-report-settings";
+import { BrandLogo } from "@/components/shared/brand-logo";
 import type { ReportBuilderData } from "@/lib/reports/data-source";
 import type {
   ReportBuilderInput,
@@ -181,10 +182,11 @@ export function ReportBuilder() {
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Prepared by</p>
           <p className="text-lg font-semibold">{settings.businessName || settings.contractorName || DEFAULT_REPORT_SETTINGS.businessName}</p>
         </div>
-        {settings.logoPath && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={settings.logoPath} alt="Business logo" className="h-12 w-12 rounded-md border object-contain" />
-        )}
+        <BrandLogo
+          src={settings.logoPath}
+          alt={`${settings.businessName || settings.contractorName || DEFAULT_REPORT_SETTINGS.businessName} logo`}
+          className="h-12 w-auto object-contain"
+        />
       </div>
       <BuilderSteps steps={steps} />
       <div className="grid items-start gap-6 xl:grid-cols-[390px_minmax(0,1fr)]">

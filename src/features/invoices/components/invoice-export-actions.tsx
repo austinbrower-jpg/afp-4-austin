@@ -14,9 +14,9 @@ import {
 export function InvoiceExportActions({ data }: { data: InvoiceExportData }) {
   const [copying, setCopying] = useState(false);
 
-  function handlePdf() {
+  async function handlePdf() {
     try {
-      downloadInvoicePdf(data);
+      await downloadInvoicePdf(data);
     } catch {
       toast.error("Failed to generate PDF");
     }

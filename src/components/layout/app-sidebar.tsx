@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Briefcase } from "lucide-react";
@@ -16,6 +17,22 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { NAV, isNavGroup, type NavLeaf } from "@/lib/nav-config";
+import { DEFAULT_REPORT_SETTINGS } from "@/lib/reports/types";
+
+/** Falls back to the Briefcase glyph if the logo file fails to load. */
+function SidebarBrandMark() {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <Briefcase className="size-4" />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={DEFAULT_REPORT_SETTINGS.logoPath}
+      alt="Battle Bound Branding logo"
+      className="size-5 object-contain"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
@@ -48,7 +65,7 @@ export function AppSidebar() {
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1.5">
           <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Briefcase className="size-4" />
+            <SidebarBrandMark />
           </div>
           <div className="flex flex-col leading-none group-data-[collapsible=icon]:hidden">
             <span className="text-sm font-semibold">Battle Bound Branding</span>

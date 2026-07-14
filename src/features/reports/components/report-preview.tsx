@@ -1,16 +1,18 @@
 import type { ReportDocument } from "@/lib/reports/types";
 import { formatMinutes, formatMoney } from "@/lib/reports/serializers";
 import { Badge } from "@/components/ui/badge";
+import { BrandLogo } from "@/components/shared/brand-logo";
 
 function Identity({ report }: { report: ReportDocument }) {
   return (
     <>
       <header className="flex flex-col justify-between gap-5 border-b-2 border-slate-700 pb-6 sm:flex-row">
         <div className="flex items-start gap-4">
-          {report.contractor.logoPath && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={report.contractor.logoPath} alt={`${report.contractor.businessName || report.contractor.name} logo`} className="h-14 w-14 shrink-0 rounded-md border border-slate-200 object-contain" />
-          )}
+          <BrandLogo
+            src={report.contractor.logoPath}
+            alt={`${report.contractor.businessName || report.contractor.name} logo`}
+            className="h-12 w-auto shrink-0 object-contain"
+          />
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{report.type === "work-log-report" ? "Client report" : "Invoice"}</div>
             <h2 className="mt-1 font-serif text-3xl font-semibold text-slate-900">{report.title}</h2>

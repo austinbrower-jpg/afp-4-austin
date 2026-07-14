@@ -2,6 +2,7 @@
 
 import { jsPDF } from "jspdf";
 import type { ReportDocument } from "@/lib/reports/types";
+import { imageFormatFromDataUrl, resolveLogoDataUrl } from "@/lib/reports/logo";
 import {
   formatMinutes,
   formatMoney,
@@ -9,6 +10,15 @@ import {
   serializeReportJson,
   serializeReportMarkdown,
 } from "@/lib/reports/serializers";
+
+/** Returns a copy of the report with the logo swapped for an embeddable data
+ * URL, for exports (PDF, print HTML) that need to be self-contained. Falls
+ * back to no logo (text-only branding) if resolution fails for any reason. */
+async function withEmbeddableLogo(report: ReportDocument): Promise<ReportDocument> {
+  const logo = await resolveLogoDataUrl(report.contractor.logoPath);
+  if (!logo) return { ...report, contractor: { ...report.contractor, logoPath: "" } };
+  return { ...report, contractor: { ...report.contractor, logoPath: logo.dataUrl } };
+}
 
 function filename(report: ReportDocument, extension: string): string {
   const base = `${report.type}-${report.invoice.number || report.invoice.periodEnd}`
@@ -37,12 +47,14 @@ export function downloadReportJson(report: ReportDocument) {
   downloadText(serializeReportJson(report), filename(report, "json"), "application/json;charset=utf-8");
 }
 
-export function downloadReportHtml(report: ReportDocument) {
-  downloadText(serializeReportHtml(report), filename(report, "html"), "text/html;charset=utf-8");
+export async function downloadReportHtml(report: ReportDocument) {
+  const embeddable = await withEmbeddableLogo(report);
+  downloadText(serializeReportHtml(embeddable), filename(report, "html"), "text/html;charset=utf-8");
 }
 
-export function openPrintReport(report: ReportDocument): boolean {
-  const url = URL.createObjectURL(new Blob([serializeReportHtml(report)], { type: "text/html;charset=utf-8" }));
+export async function openPrintReport(report: ReportDocument): Promise<boolean> {
+  const embeddable = await withEmbeddableLogo(report);
+  const url = URL.createObjectURL(new Blob([serializeReportHtml(embeddable)], { type: "text/html;charset=utf-8" }));
   const opened = window.open(url, "_blank", "noopener,noreferrer");
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   return opened !== null;
@@ -52,7 +64,7 @@ export async function copyReportMarkdown(report: ReportDocument) {
   await navigator.clipboard.writeText(serializeReportMarkdown(report));
 }
 
-export function downloadReportPdf(report: ReportDocument) {
+export async function downloadReportPdf(report: ReportDocument) {
   const pdf = new jsPDF({ unit: "pt", format: "letter", orientation: "portrait" });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
@@ -61,22 +73,23 @@ export function downloadReportPdf(report: ReportDocument) {
   const footerY = pageHeight - 26;
   let y = 0;
 
-  // Only data-URI logos can be embedded synchronously; a plain URL/path is
-  // shown as text branding instead of risking an async fetch/CORS failure
-  // inside PDF generation.
-  const logoIsEmbeddable = report.contractor.logoPath.startsWith("data:image");
+  // Resolved once up front so a failed fetch/decode never breaks PDF
+  // generation - it just falls back to text-only branding in the header.
+  const logo = await resolveLogoDataUrl(report.contractor.logoPath);
+  const logoTargetHeight = 36;
+  const logoTargetWidth = logo ? (logo.width / logo.height) * logoTargetHeight : 0;
 
   const drawHeader = () => {
     pdf.setFillColor(23, 61, 94);
     pdf.rect(0, 0, pageWidth, 64, "F");
-    if (logoIsEmbeddable) {
+    if (logo) {
       try {
-        pdf.addImage(report.contractor.logoPath, margin, 14, 36, 36);
+        pdf.addImage(logo.dataUrl, imageFormatFromDataUrl(logo.dataUrl), margin, 14, logoTargetWidth, logoTargetHeight, undefined, "MEDIUM");
       } catch {
-        // Malformed data URI - fall back to text-only branding.
+        // Decode failure inside jsPDF - fall back to text-only branding.
       }
     }
-    const textX = logoIsEmbeddable ? margin + 46 : margin;
+    const textX = logo ? margin + logoTargetWidth + 10 : margin;
     pdf.setTextColor(255, 255, 255);
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(17);

@@ -15,7 +15,7 @@ function environmentSettings(): ReportSettings {
     defaultHourlyRate: Number(process.env.REPORT_DEFAULT_HOURLY_RATE || DEFAULT_REPORT_SETTINGS.defaultHourlyRate),
     defaultPaymentTerms: process.env.REPORT_DEFAULT_PAYMENT_TERMS || DEFAULT_REPORT_SETTINGS.defaultPaymentTerms,
     defaultInvoiceNotes: process.env.REPORT_DEFAULT_INVOICE_NOTES || DEFAULT_REPORT_SETTINGS.defaultInvoiceNotes,
-    logoPath: process.env.REPORT_LOGO_PATH || "",
+    logoPath: process.env.REPORT_LOGO_PATH || DEFAULT_REPORT_SETTINGS.logoPath,
     invoiceFooter: DEFAULT_REPORT_SETTINGS.invoiceFooter,
     paymentInstructions: DEFAULT_REPORT_SETTINGS.paymentInstructions,
     clientDisplayName: process.env.REPORT_CLIENT_DISPLAY_NAME || "",

@@ -1,5 +1,7 @@
 import { jsPDF } from "jspdf";
 import { formatCurrency, formatHours } from "@/lib/calculations";
+import { imageFormatFromDataUrl, resolveLogoDataUrl } from "@/lib/reports/logo";
+import { DEFAULT_REPORT_SETTINGS } from "@/lib/reports/types";
 import type { InvoiceReport } from "@/types/domain";
 
 export interface WorkPerformedItem {
@@ -24,8 +26,8 @@ export interface InvoiceExportData {
 }
 
 const DEFAULT_BRANDING: InvoiceBranding = {
-  businessName: "Battle Bound Branding LLC",
-  logoPath: "",
+  businessName: DEFAULT_REPORT_SETTINGS.businessName,
+  logoPath: DEFAULT_REPORT_SETTINGS.logoPath,
   invoiceFooter: "",
   paymentInstructions: "",
 };
@@ -105,7 +107,7 @@ export async function copyInvoiceMarkdown(data: InvoiceExportData): Promise<void
 }
 
 /** Generates and downloads a clean one-page PDF invoice. */
-export function downloadInvoicePdf(data: InvoiceExportData): void {
+export async function downloadInvoicePdf(data: InvoiceExportData): Promise<void> {
   const { invoice, clientName, workPerformed, branding } = data;
   const brand = branding ?? DEFAULT_BRANDING;
   const doc = new jsPDF({ unit: "pt", format: "letter" });
@@ -113,13 +115,17 @@ export function downloadInvoicePdf(data: InvoiceExportData): void {
   const pageHeight = doc.internal.pageSize.getHeight();
   const marginX = 48;
   let y = 44;
-  const logoIsEmbeddable = brand.logoPath.startsWith("data:image");
-  const titleX = logoIsEmbeddable ? marginX + 42 : marginX;
-  if (logoIsEmbeddable) {
+  // Resolved once up front so a failed fetch/decode never breaks PDF
+  // generation - it just falls back to text-only branding.
+  const logo = await resolveLogoDataUrl(brand.logoPath);
+  const logoTargetHeight = 32;
+  const logoTargetWidth = logo ? (logo.width / logo.height) * logoTargetHeight : 0;
+  const titleX = logo ? marginX + logoTargetWidth + 10 : marginX;
+  if (logo) {
     try {
-      doc.addImage(brand.logoPath, marginX, y - 4, 32, 32);
+      doc.addImage(logo.dataUrl, imageFormatFromDataUrl(logo.dataUrl), marginX, y - 4, logoTargetWidth, logoTargetHeight, undefined, "MEDIUM");
     } catch {
-      // Malformed data URI - fall back to text-only branding.
+      // Decode failure inside jsPDF - fall back to text-only branding.
     }
   }
 

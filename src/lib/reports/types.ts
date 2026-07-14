@@ -233,7 +233,7 @@ export const DEFAULT_REPORT_SETTINGS: ReportSettings = {
   defaultHourlyRate: 30,
   defaultPaymentTerms: "Net 15",
   defaultInvoiceNotes: "Thank you for your business.",
-  logoPath: "",
+  logoPath: "/branding/battle-bound-branding-logo.png",
   invoiceFooter: "",
   paymentInstructions: "",
   clientDisplayName: "",
