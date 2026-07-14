@@ -32,6 +32,21 @@ async function withRelations(entries: HoursEntry[], provider: Awaited<ReturnType
     }),
   }));
 }
+
+function logHoursSuccess(details: { count: number; range: string; source: string; syncedAt: string }) {
+  console.info("[api/hours] fetch succeeded", details);
+}
+
+function logHoursFailure(error: unknown) {
+  if (!(error instanceof Error)) {
+    console.warn("[api/hours] fetch failed", { category: "unexpected" });
+    return;
+  }
+  const maybeError = error as Error & { code?: unknown };
+  const category = typeof maybeError.code === "string" ? maybeError.code : error.name;
+  console.warn("[api/hours] fetch failed", { category });
+}
+
 export async function GET(request: NextRequest) {
   try {
     const provider = await getDataProvider();
@@ -45,8 +60,16 @@ export async function GET(request: NextRequest) {
     if (client) entries = entries.filter((entry) => entry.clientId === client.id);
     if (start && end) entries = entries.filter((entry) => entry.date >= start && entry.date <= end);
     entries.sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime));
-    return NextResponse.json(await withRelations(entries, provider), { headers: NO_STORE_HEADERS });
+    const payload = await withRelations(entries, provider);
+    logHoursSuccess({
+      count: payload.length,
+      range: start && end ? `${start}..${end}` : "all",
+      source: provider.mode,
+      syncedAt: new Date().toISOString(),
+    });
+    return NextResponse.json(payload, { headers: NO_STORE_HEADERS });
   } catch (error) {
+    logHoursFailure(error);
     return dataErrorResponse(error);
   }
 }

@@ -15,6 +15,7 @@ export function useHoursEntries(range: HoursRangeKey) {
   return useQuery({
     queryKey: hoursQueryKey(range),
     queryFn: () => hoursApi.list(start && end ? { start, end } : undefined),
+    staleTime: 0,
   });
 }
 
@@ -23,6 +24,7 @@ export function useHoursStats() {
   return useQuery({
     queryKey: hoursAllQueryKey,
     queryFn: () => hoursApi.list(),
+    staleTime: 0,
   });
 }
 
