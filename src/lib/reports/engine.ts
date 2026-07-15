@@ -26,13 +26,14 @@ export function roundCurrency(value: number): number {
 }
 
 export function exactElapsedMinutes(
-  startTime: string,
-  endTime: string,
+  startTime: string | null | undefined,
+  endTime: string | null | undefined,
   breakMinutes = 0,
 ): number {
-  const parse = (value: string) => {
+  const parse = (value: string | null | undefined) => {
+    if (typeof value !== "string") return null;
     const [hours, minutes] = value.split(":").map(Number);
-    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
     return hours * 60 + minutes;
   };
   const start = parse(startTime);

@@ -3,28 +3,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { hoursApi } from "../api";
 import type { HoursEntryInput } from "../lib/types";
-import type { HoursRangeKey } from "../lib/ranges";
-import { resolveRange } from "../lib/ranges";
-
-export const hoursQueryKey = (range?: HoursRangeKey) => ["hours", "list", range ?? "all"] as const;
 /** Unfiltered - always the full entry set, used to compute weekly/monthly/invoice stats. */
 export const hoursAllQueryKey = ["hours", "list", "all"] as const;
-
-export function useHoursEntries(range: HoursRangeKey) {
-  const { start, end } = resolveRange(range);
-  return useQuery({
-    queryKey: hoursQueryKey(range),
-    queryFn: () => hoursApi.list(start && end ? { start, end } : undefined),
-    staleTime: 0,
-  });
-}
 
 /** Always fetches the full, unfiltered entry set so stat cards stay accurate regardless of the table's active range. */
 export function useHoursStats() {
   return useQuery({
     queryKey: hoursAllQueryKey,
     queryFn: () => hoursApi.list(),
-    staleTime: 0,
+    staleTime: 15_000,
   });
 }
 

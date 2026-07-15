@@ -60,6 +60,22 @@ describe("Notion native mapping", () => {
     expect(work.relatedHoursIds).toEqual(["hours-page"]);
   });
 
+  it("normalizes valid twelve-hour native Notion times", () => {
+    const page: NotionPageLike = {
+      id: "localized-hours",
+      properties: {
+        Date: title("2026-07-14"),
+        "Start Time": text("4:02 PM"),
+        "End Time": text("7:45 PM"),
+        "Total Hours": { number: 3.72 },
+      },
+    };
+
+    const hours = mapNotionHours(page, { clientId: "client-page" });
+    expect(hours.startTime).toBe("16:02");
+    expect(hours.endTime).toBe("19:45");
+  });
+
   it("handles malformed rows with defaults and warnings instead of throwing", () => {
     const page: NotionPageLike = { id: "broken", properties: {} };
     const hours = mapNotionHours(page, { clientId: "client-page" });

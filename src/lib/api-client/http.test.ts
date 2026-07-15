@@ -1,8 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiGet, apiPost, ApiError } from "./http";
 
 beforeEach(() => {
   vi.unstubAllGlobals();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("api client cache control", () => {
@@ -58,5 +62,20 @@ describe("api client cache control", () => {
       details: ["NOTION_API_KEY"],
       message: "Notion configuration is missing",
     } as Partial<ApiError>);
+  });
+
+  it("turns a bounded request timeout into a retryable API error", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn((_input: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      }),
+    ));
+
+    const request = apiGet("/api/report-builder", { timeoutMs: 100 });
+    const expectation = expect(request).rejects.toMatchObject({ status: 408, code: "timeout" });
+    await vi.advanceTimersByTimeAsync(100);
+
+    await expectation;
   });
 });

@@ -69,9 +69,9 @@ export function DataSourceBadge() {
     <div className="flex items-center gap-1.5">
       <div className="flex flex-col items-end gap-0.5">
         <div className="flex items-center gap-1.5">
-          <Badge variant="outline" className="gap-1.5">
+          <Badge variant="outline" className="size-8 justify-center p-0 sm:h-5 sm:w-auto sm:gap-1.5 sm:px-2 sm:py-0.5">
             {notion ? <Cloud className="size-3" /> : <Database className="size-3" />}
-            {notion ? "Notion data" : "Local mock data"}
+            <span className="sr-only sm:not-sr-only">{notion ? "Notion data" : "Local mock data"}</span>
           </Badge>
           <Button
             variant="ghost"

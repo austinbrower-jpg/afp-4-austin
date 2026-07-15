@@ -301,6 +301,20 @@ describe("NativeNotionProvider", () => {
     expect(july14?.status).toBe("in-progress");
     expect(july14?.id).toBe("july14-db");
     expect(rows.filter((row) => row.date === "2026-07-13")).toHaveLength(1);
+    expect(notion.pages.retrieve).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates concurrent hours reads but never caches a completed hours result", async () => {
+    const notion = mockNotion();
+    const provider = new NativeNotionProvider(notion as unknown as NotionClient, databases);
+
+    await Promise.all([provider.hours.list(), provider.hours.list()]);
+    await provider.hours.list();
+
+    const hoursQueries = notion.dataSources.query.mock.calls.filter(
+      ([request]) => (request as { data_source_id: string }).data_source_id === "hours-source",
+    );
+    expect(hoursQueries).toHaveLength(2);
   });
 
   it("skips malformed child pages without dropping valid siblings", async () => {

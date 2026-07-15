@@ -1,5 +1,6 @@
 import { format, subDays } from "date-fns";
 import { getMonthRange, getWeekRange } from "@/lib/calculations";
+import type { HoursEntryWithRelations } from "./types";
 
 /**
  * Table scoping control. "This Week" and "This Month" are Mon-Sun /
@@ -34,4 +35,14 @@ export function resolveRange(key: HoursRangeKey, today: Date = new Date()): { st
     default:
       return {};
   }
+}
+
+export function entriesForRange(
+  entries: readonly HoursEntryWithRelations[],
+  key: HoursRangeKey,
+  today: Date = new Date(),
+): HoursEntryWithRelations[] {
+  const { start, end } = resolveRange(key, today);
+  if (!start || !end) return [...entries];
+  return entries.filter((entry) => entry.date >= start && entry.date <= end);
 }

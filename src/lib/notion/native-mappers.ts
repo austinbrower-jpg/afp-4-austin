@@ -90,6 +90,30 @@ function requiredText(value: string, label: string, fallback: string, warnings: 
   return fallback;
 }
 
+function normalizeClockTime(value: string, label: string, fallback: string, warnings: string[]): string {
+  const twentyFourHour = value.match(/^(\d{1,2}):(\d{2})$/);
+  if (twentyFourHour) {
+    const hours = Number(twentyFourHour[1]);
+    const minutes = Number(twentyFourHour[2]);
+    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+    }
+  }
+
+  const twelveHour = value.match(/^(\d{1,2}):(\d{2})\s*([ap]m)$/i);
+  if (twelveHour) {
+    const rawHours = Number(twelveHour[1]);
+    const minutes = Number(twelveHour[2]);
+    if (rawHours >= 1 && rawHours <= 12 && minutes >= 0 && minutes <= 59) {
+      const hours = (rawHours % 12) + (twelveHour[3].toLowerCase() === "pm" ? 12 : 0);
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+    }
+  }
+
+  warnings.push(`${label} is invalid; using "${fallback}".`);
+  return fallback;
+}
+
 function extractWorkDoneSection(pageContent: string | undefined, section: string): string {
   if (!pageContent) return "";
   const lines = pageContent.split(/\n\n+/).map((line) => line.trim()).filter(Boolean);
@@ -155,8 +179,10 @@ export function mapNotionHours(page: NotionPageLike, context: MappingContext): H
   const parsed = hoursFromNotionProperties(page.properties);
   const projectId = extractRelationIds(page.properties[NOTION_SCHEMA.hours.project])[0] ?? null;
   const relatedWorkDoneIds = extractRelationIds(page.properties[NOTION_SCHEMA.hours.relatedWorkDone]);
-  const startTime = requiredText(parsed.startTime ?? "", "Start Time", "00:00", warnings);
-  const endTime = requiredText(parsed.endTime ?? "", "End Time", startTime, warnings);
+  const startText = requiredText(parsed.startTime ?? "", "Start Time", "00:00", warnings);
+  const startTime = normalizeClockTime(startText, "Start Time", "00:00", warnings);
+  const endText = requiredText(parsed.endTime ?? "", "End Time", startTime, warnings);
+  const endTime = normalizeClockTime(endText, "End Time", startTime, warnings);
   const migrationKey = extractPlainText(page.properties[NOTION_SCHEMA.hours.migrationKey]) || null;
   const sessionId = extractPlainText(page.properties[NOTION_SCHEMA.hours.sessionId]) || parsed.sessionId || null;
   const billingSelect = extractSelect(page.properties[NOTION_SCHEMA.hours.billingStatus]);

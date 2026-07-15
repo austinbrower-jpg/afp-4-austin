@@ -1793,3 +1793,59 @@ Wired the Battle Bound Branding logo into the existing Phase 16 branding system 
 ### Recommended next step
 
 - Run the full validation suite, review the diff, and then open the new draft PR once the branch is confirmed clean.
+
+---
+
+## 2026-07-14 20:45 CDT — Invoice reporting reliability, daily hours, and Notion read performance (GPT-5.6 Codex high effort via shell, in-app browser, and Vercel CLI)
+
+### Task summary
+
+- Diagnosed and fixed the production Invoice Dashboard Server Component failure and Report Builder's persistent loading state.
+- Added an exact, local-calendar Hours by Day breakdown using the active range and the same source records as the hours table.
+- Reduced cold live-Notion Report Builder API latency from about 37.1 seconds to 3.18 seconds (about 91%) and Invoice Dashboard latency from about 26.1 seconds to 2.91 seconds (about 89%).
+
+### Root causes
+
+- The previous Work Done change recursively crawled every child page, retrieved page metadata separately, and then fetched block content again. Dashboard and Report Builder inherited the resulting upstream request fan-out; Dashboard let failures escape a Server Component, while Report Builder retried failed requests and could remain on skeletons for an unbounded period.
+- Report Builder also crawled full private Knowledge page bodies even though report composition only needs database-property summaries.
+- Hours fetched overlapping datasets twice and had no explicit daily aggregation. Native Notion clock strings could contain 12-hour AM/PM values that the exact duration calculations did not understand.
+- The root error boundary used a client reset instead of Next.js 16's data-refetching `unstable_retry` callback.
+
+### Files changed
+
+- Notion/provider performance and safe diagnostics: `src/lib/notion/native-provider.ts`, `native-provider-server.ts`, `native-mappers.ts`, their tests, `src/lib/data/provider-types.ts`, `src/lib/reports/data-source.ts`, and `src/lib/reports/engine.ts`.
+- Dashboard resilience: `src/lib/invoices/dashboard.ts`, its tests, `src/app/api/invoices/dashboard/route.ts`, its route test, `src/app/invoices/dashboard/page.tsx`, and `src/features/invoices/components/invoice-dashboard.tsx` plus its render test.
+- Report Builder resilience: `src/app/api/report-builder/route.ts`, `src/features/reports/components/report-builder.tsx`, and `src/features/reports/lib/load-state.ts` plus its tests.
+- Request/error handling: `src/lib/api-client/http.ts`, its tests, `src/lib/api/errors.ts`, and `src/app/error.tsx`.
+- Daily hours: `src/features/hours/components/hours-by-day.tsx`, `hours-workspace.tsx`, `src/features/hours/hooks/use-hours.ts`, `src/features/hours/lib/ranges.ts`, and `daily-summary.ts` plus its tests.
+- Mobile shell fit: `src/app/layout.tsx`, `src/components/layout/top-bar.tsx`, `src/features/search/components/global-search.tsx`, and `src/features/runtime/components/data-source-badge.tsx`.
+
+### Completed work
+
+- Reused one server-side native provider, deduplicated concurrent reads, added short caches for stable entities, bounded block traversal concurrency, removed redundant page metadata requests, and restricted Work Done body reads to records that actually need content. Hours intentionally retain only in-flight deduplication so a later explicit refresh always reaches Notion.
+- Added safe structured timing logs containing only operation categories, durations, and counts; raw Notion content, page IDs, secrets, and private error messages are not logged or returned.
+- Moved Dashboard loading into a bounded client query with a clear safe error state and a real retry. Dashboard aggregation now validates, deduplicates, and skips malformed rows instead of failing the entire page.
+- Added bounded Report Builder requests, disabled automatic retry multiplication, guaranteed loading exits to success or a safe retry state, and replaced render-time state mutation with a stable loaded component.
+- Added newest-first daily totals, entries, and project counts for the selected hours range without changing the existing detail table. Totals prefer valid persisted duration values and fall back to exact start/end/break calculations.
+- Made global search, source status, header spacing, and page padding responsive so the requested reporting routes fit a 390×844 viewport without horizontal page overflow.
+- Confirmed the existing Notion refresh action issues a fresh Hours request and updates the last-synced indicator; no Notion writes were performed.
+
+### Verification results
+
+- `npm run lint` — pass.
+- `npx tsc --noEmit` — pass.
+- `npm test` — 49 files and 325 tests pass.
+- `npm run build` — pass with all Next.js 16 routes generated successfully.
+- `git diff --check` — pass.
+- Built-app browser validation with live Notion data — Report Builder, Invoice Dashboard, Hours, and Invoice Reports pass on desktop and 390×844 mobile with no persistent skeletons, success-path errors, or horizontal page overflow.
+- Forced upstream-failure browser validation — Dashboard and Report Builder exit loading, show safe copy, and issue a second source request when Try Again is clicked.
+
+### Assumptions and remaining risk
+
+- The live Notion database properties remain the authoritative structured values; page-body content is read only where the structured Work Done record is incomplete or not done.
+- Short process-local caches improve concurrent route performance but do not replace explicit refresh behavior or HTTP no-store semantics.
+- Production route smoke testing still depends on the protected app accepting the operator's existing credentials after the Git-triggered deployment.
+
+### Recommended next step
+
+- Push this verified `main` commit, observe the Git-sourced Vercel deployment, then smoke `/reports`, `/invoices/dashboard`, `/hours`, and `/invoices` without issuing any manual deployment or Notion write.

@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { addDays, format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Database, Eye, LockKeyhole } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, Eye, LockKeyhole, RefreshCw } from "lucide-react";
 import { apiGet } from "@/lib/api-client/http";
 import { composeReport } from "@/lib/reports/engine";
 import { resolveReportDataset } from "@/lib/reports/dataset-resolver";
+import { getReportBuilderLoadState } from "@/features/reports/lib/load-state";
 import { useBrowserReportSettings } from "@/features/reports/lib/browser-report-settings";
 import { BrandLogo } from "@/components/shared/brand-logo";
 import type { ReportBuilderData } from "@/lib/reports/data-source";
@@ -20,6 +21,7 @@ import type {
 import { DEFAULT_REPORT_SETTINGS } from "@/lib/reports/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -102,32 +104,95 @@ function BuilderSteps({ steps }: { steps: BuilderStep[] }) {
 export function ReportBuilder() {
   const builderQuery = useQuery({
     queryKey: ["report-builder-data"],
-    queryFn: () => apiGet<ReportBuilderData>("/api/report-builder"),
+    queryFn: ({ signal }) =>
+      apiGet<ReportBuilderData>("/api/report-builder", { signal, timeoutMs: 20_000 }),
+    staleTime: 30_000,
+    retry: false,
   });
   const settingsQuery = useQuery({
     queryKey: ["report-settings"],
-    queryFn: () => apiGet<ReportSettings>("/api/report-settings"),
+    queryFn: ({ signal }) =>
+      apiGet<ReportSettings>("/api/report-settings", { signal, timeoutMs: 10_000 }),
+    staleTime: 60_000,
+    retry: false,
   });
   const settings = useBrowserReportSettings(
     settingsQuery.data ?? DEFAULT_REPORT_SETTINGS,
     builderQuery.data?.recommendedSource === "notion",
   );
-  const [state, setState] = useState<BuilderState | null>(null);
-  const [hasPreview, setHasPreview] = useState(true);
-  if (builderQuery.data && settingsQuery.data && state === null) {
-    const source = builderQuery.data.recommendedSource;
-    const dataset = resolveReportDataset(builderQuery.data.datasets, source, builderQuery.data.recommendedSource);
-    setState(makeInitialState(dataset, dataset.source, settings));
-  }
 
-  if (builderQuery.isError || settingsQuery.isError) {
-    return <Alert variant="destructive"><AlertTriangle /><AlertTitle>Report data could not be loaded</AlertTitle><AlertDescription>{builderQuery.error?.message || settingsQuery.error?.message}</AlertDescription></Alert>;
+  const loadState = getReportBuilderLoadState({
+    builderHasData: Boolean(builderQuery.data),
+    settingsHaveData: Boolean(settingsQuery.data),
+    hasError: builderQuery.isError || settingsQuery.isError,
+  });
+
+  const retry = () => {
+    void Promise.all([builderQuery.refetch(), settingsQuery.refetch()]);
+  };
+  if (loadState === "error") {
+    const isRetrying = builderQuery.isFetching || settingsQuery.isFetching;
+    return (
+      <Alert variant="destructive">
+        <AlertTriangle />
+        <AlertTitle>Report data could not be loaded</AlertTitle>
+        <AlertDescription className="space-y-4">
+          <p>The source request failed or took too long. No Notion records were changed.</p>
+          <Button variant="outline" size="sm" disabled={isRetrying} onClick={retry}>
+            <RefreshCw className={isRetrying ? "animate-spin" : undefined} />
+            {isRetrying ? "Trying again…" : "Try again"}
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
   }
-  if (builderQuery.isLoading || settingsQuery.isLoading || !state || !builderQuery.data || !settingsQuery.data) {
+  if (loadState === "loading" || !builderQuery.data || !settingsQuery.data) {
     return <LoadingBuilder />;
   }
 
-  const dataset = resolveReportDataset(builderQuery.data.datasets, state.source, builderQuery.data.recommendedSource);
+  let initialDataset: ReportDataset;
+  try {
+    initialDataset = resolveReportDataset(
+      builderQuery.data.datasets,
+      builderQuery.data.recommendedSource,
+      builderQuery.data.recommendedSource,
+    );
+  } catch {
+    return (
+      <Alert variant="destructive">
+        <AlertTriangle />
+        <AlertTitle>Report data could not be initialized</AlertTitle>
+        <AlertDescription className="space-y-4">
+          <p>The source returned no usable report datasets. No Notion records were changed.</p>
+          <Button variant="outline" size="sm" onClick={retry}><RefreshCw />Try again</Button>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <ReportBuilderContent
+      builderData={builderQuery.data}
+      initialDataset={initialDataset}
+      settings={settings}
+    />
+  );
+}
+
+function ReportBuilderContent({
+  builderData,
+  initialDataset,
+  settings,
+}: {
+  builderData: ReportBuilderData;
+  initialDataset: ReportDataset;
+  settings: ReportSettings;
+}) {
+  const [state, setState] = useState<BuilderState>(() =>
+    makeInitialState(initialDataset, initialDataset.source, settings),
+  );
+  const [hasPreview, setHasPreview] = useState(true);
+  const dataset = resolveReportDataset(builderData.datasets, state.source, builderData.recommendedSource);
   const clientProjects = dataset.projects.filter((project) => project.clientId === state.clientId);
   const report = composeReport(dataset, settings, state);
   const approvedDraftRecords = dataset.workRecords.filter((record) => {
@@ -147,7 +212,7 @@ export function ReportBuilder() {
     setState({ ...state, [key]: value });
   };
   const changeSource = (source: ReportDataSource) => {
-    const next = resolveReportDataset(builderQuery.data!.datasets, source, builderQuery.data!.recommendedSource);
+    const next = resolveReportDataset(builderData.datasets, source, builderData.recommendedSource);
     setState({ ...makeInitialState(next, next.source, settings), type: state.type });
     setHasPreview(true);
   };
@@ -194,7 +259,7 @@ export function ReportBuilder() {
         <Card>
           <CardHeader><CardTitle>Report setup</CardTitle><CardDescription>Filters and draft edits affect only this preview.</CardDescription></CardHeader>
           <CardContent className="space-y-5">
-            <div className="space-y-1.5"><Label>Data source</Label><Select value={state.source} onValueChange={(value) => changeSource(value as ReportDataSource)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{builderQuery.data.datasets.map((source) => <SelectItem key={source.source} value={source.source}>{source.label} ({source.hours.length})</SelectItem>)}</SelectContent></Select><div className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground"><Database className="mr-1 inline size-3" />{dataset.description}</div></div>
+            <div className="space-y-1.5"><Label>Data source</Label><Select value={state.source} onValueChange={(value) => changeSource(value as ReportDataSource)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{builderData.datasets.map((source) => <SelectItem key={source.source} value={source.source}>{source.label} ({source.hours.length})</SelectItem>)}</SelectContent></Select><div className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground"><Database className="mr-1 inline size-3" />{dataset.description}</div></div>
             <div className="space-y-1.5"><Label>Report type</Label><Select value={state.type} onValueChange={(value) => update("type", value as ReportType)}><SelectTrigger className="w-full"><SelectValue>{(value: string) => REPORT_LABELS[value as ReportType]}</SelectValue></SelectTrigger><SelectContent>{Object.entries(REPORT_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1.5"><Label>Client</Label><Select value={state.clientId} onValueChange={(value) => changeClient(value ?? "")}><SelectTrigger className="w-full"><SelectValue placeholder="No client available" /></SelectTrigger><SelectContent>{dataset.clients.map((client) => <SelectItem value={client.id} key={client.id}>{client.name}</SelectItem>)}</SelectContent></Select></div>
             <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label htmlFor="report-start">Start date</Label><Input id="report-start" type="date" value={state.periodStart} onChange={(event) => update("periodStart", event.target.value)} /></div><div className="space-y-1.5"><Label htmlFor="report-end">End date</Label><Input id="report-end" type="date" value={state.periodEnd} onChange={(event) => update("periodEnd", event.target.value)} /></div></div>

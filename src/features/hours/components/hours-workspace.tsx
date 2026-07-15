@@ -3,14 +3,15 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useHoursEntries, useHoursStats } from "../hooks/use-hours";
-import type { HoursRangeKey } from "../lib/ranges";
+import { useHoursStats } from "../hooks/use-hours";
+import { entriesForRange, type HoursRangeKey } from "../lib/ranges";
 import type { TimerStopResult } from "../lib/timer-store";
 import type { HoursEntryWithRelations } from "../lib/types";
 import { HoursSummaryBar } from "./hours-summary-bar";
 import { HoursRangeControl } from "./hours-range-control";
 import { HoursTimerCard } from "./hours-timer-card";
 import { HoursTable } from "./hours-table";
+import { HoursByDay } from "./hours-by-day";
 import { HoursEntryDialog } from "./hours-entry-dialog";
 import { TimerStopDialog } from "./timer-stop-dialog";
 import { DeleteEntryDialog } from "./delete-entry-dialog";
@@ -30,8 +31,8 @@ export function HoursWorkspace({
 }) {
   const [range, setRange] = useState<HoursRangeKey>("this-week");
 
-  const { data: entries, isLoading } = useHoursEntries(range);
   const { data: allEntries, isLoading: isStatsLoading } = useHoursStats();
+  const entries = entriesForRange(allEntries ?? [], range);
 
   const [entryDialogOpen, setEntryDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<HoursEntryWithRelations | null>(null);
@@ -77,9 +78,11 @@ export function HoursWorkspace({
         </Button>
       </div>
 
+      <HoursByDay entries={entries} isLoading={isStatsLoading} />
+
       <HoursTable
-        entries={entries ?? []}
-        isLoading={isLoading}
+        entries={entries}
+        isLoading={isStatsLoading}
         onEdit={openEditDialog}
         onDelete={setDeleteTarget}
         allowDelete={dataSourceMode === "mock"}

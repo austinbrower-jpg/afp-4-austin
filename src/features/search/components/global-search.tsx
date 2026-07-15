@@ -72,12 +72,13 @@ export function GlobalSearch() {
       <Button
         variant="outline"
         size="sm"
-        className="text-muted-foreground w-56 justify-start gap-2 font-normal"
+        className="w-9 justify-center px-0 font-normal text-muted-foreground sm:w-56 sm:justify-start sm:gap-2 sm:px-3"
+        aria-label="Search everything"
         onClick={() => setOpen(true)}
       >
         <Search className="size-4" />
-        Search everything
-        <kbd className="ml-auto rounded border bg-muted px-1.5 py-0.5 text-[10px] font-mono">
+        <span className="hidden sm:inline">Search everything</span>
+        <kbd className="ml-auto hidden rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px] sm:inline">
           ⌘K
         </kbd>
       </Button>

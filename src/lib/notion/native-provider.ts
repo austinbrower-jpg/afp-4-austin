@@ -34,16 +34,21 @@ type NativeEntity = Client | Project | HoursEntry | WorkLog | KnowledgePage | In
 type DiscoveredPage = {
   id: string;
   title: string;
-  url?: string;
-  created_time?: string;
-  last_edited_time?: string;
+};
+
+type CachedRead = {
+  expiresAt: number;
+  value: NativeEntity[];
 };
 
 const WORK_DONE_ROOT_TITLE = "Work Done";
 
 function safeNotionError(error: unknown, action: string): DataProviderError {
-  const message = error instanceof Error ? error.message : "Unknown Notion API error";
-  return new DataProviderError(`Notion ${action} failed: ${message}`, "notion-api", 502);
+  console.warn("[notion-read] upstream request failed", {
+    action,
+    category: error instanceof Error ? error.name : "unexpected",
+  });
+  return new DataProviderError(`Notion could not complete ${action}.`, "notion-api", 502);
 }
 
 function notionResult<T extends NativeEntity>(entity: T, duplicatePrevented = false): PersistenceResult<T> {
@@ -140,8 +145,11 @@ function mergeWorkLogs(base: WorkLog[], overlays: WorkLog[]): WorkLog[] {
 
 export class NativeNotionProvider implements AppDataProvider {
   readonly mode = "notion" as const;
-  private clientsPromise: Promise<Client[]> | null = null;
   private readonly dataSourceIds = new Map<SyncEntityType, string>();
+  private readonly readCache = new Map<SyncEntityType, CachedRead>();
+  private readonly readsInFlight = new Map<SyncEntityType, Promise<NativeEntity[]>>();
+  private activeBlockReads = 0;
+  private readonly blockReadWaiters: Array<() => void> = [];
   private workDoneRootPagePromise: Promise<string | null> | null = null;
 
   constructor(private readonly notion: NotionClient, private readonly databases: NotionDatabaseMap) {}
@@ -190,6 +198,74 @@ export class NativeNotionProvider implements AppDataProvider {
     }
   }
 
+  private async cachedRead<T extends NativeEntity>(
+    type: SyncEntityType,
+    ttlMs: number,
+    load: () => Promise<T[]>,
+  ): Promise<T[]> {
+    const now = Date.now();
+    const cached = this.readCache.get(type);
+    if (cached && cached.expiresAt > now) {
+      return cached.value as T[];
+    }
+
+    const pending = this.readsInFlight.get(type);
+    if (pending) return pending as Promise<T[]>;
+
+    const startedAt = Date.now();
+    const request = load()
+      .then((rows) => {
+        if (ttlMs > 0) {
+          this.readCache.set(type, { expiresAt: Date.now() + ttlMs, value: rows });
+        }
+        console.info("[notion-read] completed", {
+          entity: type,
+          durationMs: Date.now() - startedAt,
+          count: rows.length,
+        });
+        return rows;
+      })
+      .catch((error) => {
+        console.warn("[notion-read] failed", {
+          entity: type,
+          durationMs: Date.now() - startedAt,
+          category: error instanceof DataProviderError ? error.code : "unexpected",
+        });
+        throw error;
+      })
+      .finally(() => {
+        this.readsInFlight.delete(type);
+      });
+
+    this.readsInFlight.set(type, request);
+    return request;
+  }
+
+  private invalidateRead(type: SyncEntityType): void {
+    this.readCache.delete(type);
+  }
+
+  private async withBlockReadSlot<T>(read: () => Promise<T>): Promise<T> {
+    if (this.activeBlockReads >= 3) {
+      await new Promise<void>((resolve) => this.blockReadWaiters.push(resolve));
+    }
+    this.activeBlockReads += 1;
+    try {
+      return await read();
+    } finally {
+      this.activeBlockReads -= 1;
+      this.blockReadWaiters.shift()?.();
+    }
+  }
+
+  private listBlockChildren(blockId: string, cursor?: string) {
+    return this.withBlockReadSlot(() => this.notion.blocks.children.list({
+      block_id: blockId,
+      start_cursor: cursor,
+      page_size: 100,
+    }));
+  }
+
   private async workDoneRootPageId(): Promise<string | null> {
     this.workDoneRootPagePromise ??= (async () => {
       try {
@@ -213,32 +289,26 @@ export class NativeNotionProvider implements AppDataProvider {
     const pages: DiscoveredPage[] = [];
     let cursor: string | undefined;
     do {
-      const response = await this.notion.blocks.children.list({ block_id: blockId, start_cursor: cursor, page_size: 100 });
+      const response = await this.listBlockChildren(blockId, cursor);
       for (const block of response.results as Array<{ id: string; type: string; has_children?: boolean; [key: string]: unknown }>) {
         if (block.type === "child_page") {
           const child = block.child_page as { title?: string } | undefined;
           const title = child?.title?.trim() ?? "";
           if (!title || seen.has(block.id)) continue;
           seen.add(block.id);
-          try {
-            const page = await this.notion.pages.retrieve({ page_id: block.id });
-            pages.push({
-              id: block.id,
-              title,
-              url: "url" in page ? (page.url as string | undefined) : undefined,
-              created_time: "created_time" in page ? (page.created_time as string | undefined) : undefined,
-              last_edited_time: "last_edited_time" in page ? (page.last_edited_time as string | undefined) : undefined,
-            });
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "Unknown Notion API error";
-            console.warn("Skipping Work Done child page during discovery.", { pageId: block.id, reason: message.slice(0, 120) });
-          }
+          const isDatedWorkLog = Boolean(parseWorkLogDate(title));
+          if (isDatedWorkLog) pages.push({ id: block.id, title });
+          // A dated page's descendants are its content, which pageContent reads
+          // later. Only traverse non-date containers while looking for more
+          // dated Work Done pages.
+          if (isDatedWorkLog || !block.has_children) continue;
           try {
             const nested = await this.collectChildPages(block.id, seen);
             pages.push(...nested);
           } catch (error) {
-            const message = error instanceof Error ? error.message : "Unknown Notion API error";
-            console.warn("Skipping nested Work Done child page branch.", { pageId: block.id, reason: message.slice(0, 120) });
+            console.warn("Skipping nested Work Done child page branch.", {
+              category: error instanceof Error ? error.name : "unexpected",
+            });
           }
           continue;
         }
@@ -247,8 +317,9 @@ export class NativeNotionProvider implements AppDataProvider {
             const nested = await this.collectChildPages(block.id, seen);
             pages.push(...nested);
           } catch (error) {
-            const message = error instanceof Error ? error.message : "Unknown Notion API error";
-            console.warn("Skipping nested Work Done child page branch.", { pageId: block.id, reason: message.slice(0, 120) });
+            console.warn("Skipping nested Work Done child page branch.", {
+              category: error instanceof Error ? error.name : "unexpected",
+            });
           }
         }
       }
@@ -266,7 +337,7 @@ export class NativeNotionProvider implements AppDataProvider {
     const visit = async (blockId: string): Promise<void> => {
       let cursor: string | undefined;
       do {
-        const response = await this.notion.blocks.children.list({ block_id: blockId, start_cursor: cursor, page_size: 100 });
+        const response = await this.listBlockChildren(blockId, cursor);
         for (const block of response.results as Array<{ id: string; type: string; has_children?: boolean; [key: string]: unknown }>) {
           if (block.type === "child_page") continue;
           const value = block[block.type as keyof typeof block] as { rich_text?: Array<{ plain_text?: string }>; title?: Array<{ plain_text?: string }> } | undefined;
@@ -304,42 +375,66 @@ export class NativeNotionProvider implements AppDataProvider {
   }
 
   private listClients(): Promise<Client[]> {
-    this.clientsPromise ??= this.query("client").then((pages) => pages.map((page) => mapNotionClient(page, { databaseId: this.databaseId("client") })));
-    return this.clientsPromise;
+    return this.cachedRead("client", 10_000, async () =>
+      (await this.query("client")).map((page) => mapNotionClient(page, { databaseId: this.databaseId("client") })),
+    );
   }
 
-  private async listProjects(): Promise<Project[]> {
-    const clientId = await this.defaultClientId();
-    return (await this.query("project")).map((page) => mapNotionProject(page, { clientId, databaseId: this.databaseId("project") }));
+  private listProjects(): Promise<Project[]> {
+    return this.cachedRead("project", 10_000, async () => {
+      const clientId = await this.defaultClientId();
+      return (await this.query("project")).map((page) => mapNotionProject(page, { clientId, databaseId: this.databaseId("project") }));
+    });
   }
 
-  private async listHours(): Promise<HoursEntry[]> {
-    const clientId = await this.defaultClientId();
-    return (await this.query("hours")).map((page) => mapNotionHours(page, { clientId, databaseId: this.databaseId("hours") }));
+  private listHours(): Promise<HoursEntry[]> {
+    // Intentionally no settled-result cache: concurrent callers deduplicate,
+    // but every later explicit refresh reads current Notion hours.
+    return this.cachedRead("hours", 0, async () => {
+      const clientId = await this.defaultClientId();
+      return (await this.query("hours")).map((page) => mapNotionHours(page, { clientId, databaseId: this.databaseId("hours") }));
+    });
   }
 
-  private async listWorkLogs(): Promise<WorkLog[]> {
-    const clientId = await this.defaultClientId();
-    const dbPages = await this.query("worklog");
-    const dbLogs = await Promise.all(dbPages.map(async (page) => mapNotionWorkLog(page, {
-      clientId,
-      databaseId: this.databaseId("worklog"),
-      pageContent: await this.pageContent(page.id),
-    })));
+  private listWorkLogs(): Promise<WorkLog[]> {
+    return this.cachedRead("worklog", 15_000, async () => {
+      const databaseStartedAt = Date.now();
+      const clientId = await this.defaultClientId();
+      const [dbPages, rootPageId] = await Promise.all([
+        this.query("worklog"),
+        this.workDoneRootPageId(),
+      ]);
+      const databaseMs = Date.now() - databaseStartedAt;
+      // The database properties are the structured base record. Page-body
+      // content is fetched only for dated Work Done overlays below, avoiding
+      // a duplicate block-tree request for every database row.
+      const dbLogs = dbPages.map((page) => mapNotionWorkLog(page, {
+        clientId,
+        databaseId: this.databaseId("worklog"),
+      }));
 
-    const rootPageId = await this.workDoneRootPageId();
-    const childPages = rootPageId ? await this.collectChildPages(rootPageId) : [];
-    const childLogs = await Promise.allSettled(childPages
-      .filter((page) => Boolean(parseWorkLogDate(page.title)))
-      .map(async (page) => {
+      const discoveryStartedAt = Date.now();
+      const childPages = rootPageId ? await this.collectChildPages(rootPageId) : [];
+      const discoveryMs = Date.now() - discoveryStartedAt;
+      const dbLogsByDate = new Map(dbLogs.map((log) => [log.date, log]));
+      const pagesNeedingContent = childPages.filter((page) => {
+        const date = parseWorkLogDate(page.title);
+        if (!date) return false;
+        const base = dbLogsByDate.get(date);
+        if (!base || base.status !== "done") return true;
+        return !(
+          base.summary.trim() ||
+          base.invoiceDescription.trim() ||
+          (base.detailedWorkDescription ?? "").trim()
+        );
+      });
+      const contentStartedAt = Date.now();
+      const childLogs = await Promise.allSettled(pagesNeedingContent.map(async (page) => {
         const date = parseWorkLogDate(page.title);
         if (!date) return null;
         const content = await this.pageContent(page.id);
         const syntheticPage: NotionPageLike = {
           id: page.id,
-          url: page.url,
-          created_time: page.created_time,
-          last_edited_time: page.last_edited_time,
           properties: {
             Title: { title: [{ plain_text: page.title }] },
             Date: { date: { start: date } },
@@ -351,32 +446,63 @@ export class NativeNotionProvider implements AppDataProvider {
           pageContent: content,
         });
       }));
+      const contentMs = Date.now() - contentStartedAt;
 
-    const overlays: WorkLog[] = [];
-    for (const settled of childLogs) {
-      if (settled.status === "fulfilled" && settled.value) overlays.push(settled.value);
-      if (settled.status === "rejected") {
-        const reason = settled.reason instanceof Error ? settled.reason.message : "Unknown child-page parsing error";
-        console.warn("Skipping Work Done child page during Notion read.", { reason: reason.slice(0, 120) });
+      const overlays: WorkLog[] = [];
+      let skipped = 0;
+      for (const settled of childLogs) {
+        if (settled.status === "fulfilled" && settled.value) overlays.push(settled.value);
+        if (settled.status === "rejected") skipped += 1;
       }
-    }
+      if (skipped > 0) {
+        console.warn("[notion-read] skipped malformed records", { entity: "worklog", count: skipped });
+      }
+      console.info("[notion-worklog] phases", {
+        databaseMs,
+        discoveryMs,
+        contentMs,
+        databaseRecords: dbLogs.length,
+        overlayRecords: overlays.length,
+        contentPages: pagesNeedingContent.length,
+      });
 
-    return mergeWorkLogs(dbLogs, overlays);
+      return mergeWorkLogs(dbLogs, overlays);
+    });
   }
 
-  private async listKnowledge(): Promise<KnowledgePage[]> {
+  private listKnowledge(): Promise<KnowledgePage[]> {
+    return this.cachedRead("knowledge", 15_000, async () => {
+      const clientId = await this.defaultClientId();
+      const pages = await this.query("knowledge");
+      return Promise.all(pages.map(async (page) => mapNotionKnowledge(page, {
+        clientId,
+        databaseId: this.databaseId("knowledge"),
+        pageContent: await this.pageContent(page.id),
+      })));
+    });
+  }
+
+  async knowledgeForReporting(): Promise<KnowledgePage[]> {
+    const startedAt = Date.now();
     const clientId = await this.defaultClientId();
     const pages = await this.query("knowledge");
-    return Promise.all(pages.map(async (page) => mapNotionKnowledge(page, {
+    const rows = pages.map((page) => mapNotionKnowledge(page, {
       clientId,
       databaseId: this.databaseId("knowledge"),
-      pageContent: await this.pageContent(page.id),
-    })));
+    }));
+    console.info("[notion-read] completed", {
+      entity: "knowledge-summary",
+      durationMs: Date.now() - startedAt,
+      count: rows.length,
+    });
+    return rows;
   }
 
-  private async listInvoices(): Promise<InvoiceReport[]> {
-    const clientId = await this.defaultClientId();
-    return (await this.query("invoice")).map((page) => mapNotionInvoice(page, { clientId, databaseId: this.databaseId("invoice") }));
+  private listInvoices(): Promise<InvoiceReport[]> {
+    return this.cachedRead("invoice", 10_000, async () => {
+      const clientId = await this.defaultClientId();
+      return (await this.query("invoice")).map((page) => mapNotionInvoice(page, { clientId, databaseId: this.databaseId("invoice") }));
+    });
   }
 
   private async verifyWriteSchema(type: SyncEntityType): Promise<void> {
@@ -410,6 +536,7 @@ export class NativeNotionProvider implements AppDataProvider {
       const page = await this.notion.pages.create({ parent: { database_id: this.databaseId(type) }, properties: properties as never });
       const clientId = "clientId" in entity ? entity.clientId ?? "" : entity.id;
       const saved = mapper(page as unknown as NotionPageLike, { clientId, databaseId: this.databaseId(type) });
+      this.invalidateRead(type);
       return notionResult(saved);
     } catch (error) {
       if (error instanceof DataProviderError) throw error;
@@ -428,7 +555,9 @@ export class NativeNotionProvider implements AppDataProvider {
     try {
       const page = await this.notion.pages.update({ page_id: id, properties: properties as never });
       const clientId = "clientId" in entity ? entity.clientId ?? "" : entity.id;
-      return notionResult(mapper(page as unknown as NotionPageLike, { clientId, databaseId: this.databaseId(type) }));
+      const saved = mapper(page as unknown as NotionPageLike, { clientId, databaseId: this.databaseId(type) });
+      this.invalidateRead(type);
+      return notionResult(saved);
     } catch (error) {
       if (error instanceof DataProviderError) throw error;
       throw safeNotionError(error, `update (${type})`);

@@ -32,6 +32,8 @@ export interface AppDataProvider {
   hours: EntityStore<HoursEntry>;
   workLogs: EntityStore<WorkLog>;
   knowledge: EntityStore<KnowledgePage>;
+  /** Optional lightweight projection for report composition; omits private page-body block crawls. */
+  knowledgeForReporting?(): Promise<KnowledgePage[]>;
   invoices: EntityStore<InvoiceReport>;
 }
 

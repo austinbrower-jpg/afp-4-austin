@@ -202,8 +202,11 @@ function mapKnowledge(page: KnowledgePage): ReportKnowledgeRecord {
 
 async function buildStoredDataset(provider: AppDataProvider): Promise<ReportDataset> {
   const source = provider.mode === "notion" ? "notion" : "local-mock";
+  const knowledgeForReporting = provider.knowledgeForReporting
+    ? provider.knowledgeForReporting()
+    : provider.knowledge.list();
   const [clients, projects, hours, workLogs, knowledge] = await Promise.all([
-    provider.clients.list(), provider.projects.list(), provider.hours.list(), provider.workLogs.list(), provider.knowledge.list(),
+    provider.clients.list(), provider.projects.list(), provider.hours.list(), provider.workLogs.list(), knowledgeForReporting,
   ]);
   return {
     source,

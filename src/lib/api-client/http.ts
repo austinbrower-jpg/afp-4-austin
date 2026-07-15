@@ -26,19 +26,51 @@ export class ApiError extends Error {
   }
 }
 
+export interface ApiFetchInit extends RequestInit {
+  timeoutMs?: number;
+}
+
 export async function apiFetch<T>(
   input: string,
-  init?: RequestInit,
+  init?: ApiFetchInit,
 ): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
-  const res = await fetch(input, {
-    ...init,
-    cache: method === "GET" ? init?.cache ?? "no-store" : init?.cache,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-  });
+  const controller = new AbortController();
+  const externalSignal = init?.signal;
+  const { timeoutMs, ...fetchInit } = init ?? {};
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort(externalSignal?.reason);
+  if (externalSignal?.aborted) abortFromCaller();
+  else externalSignal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timeout = timeoutMs
+    ? setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs)
+    : null;
+
+  let res: Response;
+  try {
+    res = await fetch(input, {
+      ...fetchInit,
+      signal: controller.signal,
+      cache: method === "GET" ? init?.cache ?? "no-store" : init?.cache,
+      headers: {
+        "Content-Type": "application/json",
+        ...init?.headers,
+      },
+    });
+  } catch (error) {
+    if (timedOut) {
+      const timeoutError = new ApiError(408, "The request took too long. Please try again.");
+      timeoutError.code = "timeout";
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    externalSignal?.removeEventListener("abort", abortFromCaller);
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
@@ -60,7 +92,7 @@ export async function apiFetch<T>(
   return (await res.json()) as T;
 }
 
-export const apiGet = <T>(url: string) => apiFetch<T>(url);
+export const apiGet = <T>(url: string, init?: ApiFetchInit) => apiFetch<T>(url, init);
 export const apiPost = <T>(url: string, body?: unknown) =>
   apiFetch<T>(url, { method: "POST", body: body ? JSON.stringify(body) : undefined });
 export const apiPatch = <T>(url: string, body?: unknown) =>
