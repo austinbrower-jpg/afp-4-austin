@@ -11,20 +11,36 @@ import type { HoursEntryWithRelations } from "@/types/api";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function withRelations(entries: HoursEntry[], provider: Awaited<ReturnType<typeof getDataProvider>>) {
+type RelationIndexes = {
+  projectMap: Map<string, string>;
+  workLogMap: Map<string, string>;
+  invoiceMap: Map<string, string>;
+};
+
+async function loadRelationIndexes(
+  provider: Awaited<ReturnType<typeof getDataProvider>>,
+): Promise<RelationIndexes> {
+  const workLogsForSummary = provider.workLogsForSummary
+    ? provider.workLogsForSummary()
+    : provider.workLogs.list();
   const [projects, workLogs, invoices] = await Promise.all([
     provider.projects.list(),
-    provider.workLogs.list(),
+    workLogsForSummary,
     provider.invoices.list(),
   ]);
-  const projectMap = new Map(projects.map((project) => [project.id, project.name]));
-  const workLogMap = new Map(workLogs.map((work) => [work.id, work.title]));
-  const invoiceMap = new Map(invoices.map((inv) => [inv.id, inv.invoiceNumber]));
+  return {
+    projectMap: new Map(projects.map((project) => [project.id, project.name])),
+    workLogMap: new Map(workLogs.map((work) => [work.id, work.title])),
+    invoiceMap: new Map(invoices.map((inv) => [inv.id, inv.invoiceNumber])),
+  };
+}
+
+function withRelations(entries: HoursEntry[], indexes: RelationIndexes) {
   return entries.map((entry): HoursEntryWithRelations => ({
     ...entry,
-    projectName: entry.projectId ? projectMap.get(entry.projectId) ?? null : null,
-    workLogTitle: entry.relatedWorkLogId ? workLogMap.get(entry.relatedWorkLogId) ?? null : null,
-    invoiceReportLabel: entry.invoiceReportId ? invoiceMap.get(entry.invoiceReportId) ?? null : null,
+    projectName: entry.projectId ? indexes.projectMap.get(entry.projectId) ?? null : null,
+    workLogTitle: entry.relatedWorkLogId ? indexes.workLogMap.get(entry.relatedWorkLogId) ?? null : null,
+    invoiceReportLabel: entry.invoiceReportId ? indexes.invoiceMap.get(entry.invoiceReportId) ?? null : null,
     superseded: isSupersededHours({
       migrationKey: entry.externalId,
       externalId: entry.externalId,
@@ -50,17 +66,21 @@ function logHoursFailure(error: unknown) {
 export async function GET(request: NextRequest) {
   try {
     const provider = await getDataProvider();
-    const client = (await provider.clients.list())[0];
+    const [client, allEntries, relationIndexes] = await Promise.all([
+      provider.clients.list().then((clients) => clients[0]),
+      provider.hours.list(),
+      loadRelationIndexes(provider),
+    ]);
     if (!client && provider.mode !== "notion") {
       return NextResponse.json([], { headers: NO_STORE_HEADERS });
     }
     const start = request.nextUrl.searchParams.get("start");
     const end = request.nextUrl.searchParams.get("end");
-    let entries = await provider.hours.list();
+    let entries = allEntries;
     if (client) entries = entries.filter((entry) => entry.clientId === client.id);
     if (start && end) entries = entries.filter((entry) => entry.date >= start && entry.date <= end);
     entries.sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime));
-    const payload = await withRelations(entries, provider);
+    const payload = withRelations(entries, relationIndexes);
     logHoursSuccess({
       count: payload.length,
       range: start && end ? `${start}..${end}` : "all",
@@ -110,7 +130,7 @@ export async function POST(request: NextRequest) {
       source: parsed.data.source,
     };
     const saved = await provider.hours.create(entry);
-    const [response] = await withRelations([saved.entity], provider);
+    const [response] = withRelations([saved.entity], await loadRelationIndexes(provider));
     return NextResponse.json({ ...response, persistence: saved }, { status: 201, headers: NO_STORE_HEADERS });
   } catch (error) {
     return dataErrorResponse(error);

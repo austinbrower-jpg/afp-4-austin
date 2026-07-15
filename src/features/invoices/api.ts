@@ -4,6 +4,10 @@ import type { InvoiceDetailResponse } from "@/types/api";
 
 export type { InvoiceDetailResponse };
 
+export interface InvoiceListItem extends InvoiceReport {
+  clientName: string;
+}
+
 export interface GenerateInvoiceInput {
   periodStart: string; // YYYY-MM-DD
   periodEnd: string; // YYYY-MM-DD
@@ -15,7 +19,7 @@ export interface UpdateInvoiceInput {
 }
 
 export const invoicesApi = {
-  list: () => apiGet<InvoiceReport[]>("/api/invoices"),
+  list: () => apiGet<InvoiceListItem[]>("/api/invoices"),
   get: (id: string) => apiGet<InvoiceDetailResponse>(`/api/invoices/${id}`),
   generate: (input: GenerateInvoiceInput) =>
     apiPost<InvoiceReport>("/api/invoices", input),

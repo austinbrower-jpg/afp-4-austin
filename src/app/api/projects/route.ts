@@ -16,8 +16,14 @@ export interface ProjectListItem extends Project {
 export async function GET() {
   try {
     const provider = await getDataProvider();
+    const workLogsForSummary = provider.workLogsForSummary
+      ? provider.workLogsForSummary()
+      : provider.workLogs.list();
+    const knowledgeForSummary = provider.knowledgeForReporting
+      ? provider.knowledgeForReporting()
+      : provider.knowledge.list();
     const [projects, hours, workLogs, knowledge] = await Promise.all([
-      provider.projects.list(), provider.hours.list(), provider.workLogs.list(), provider.knowledge.list(),
+      provider.projects.list(), provider.hours.list(), workLogsForSummary, knowledgeForSummary,
     ]);
     const items: ProjectListItem[] = projects.map((project) => ({
       ...project,

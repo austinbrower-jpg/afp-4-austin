@@ -40,6 +40,7 @@ type CachedRead = {
   expiresAt: number;
   value: NativeEntity[];
 };
+type ReadCacheKey = SyncEntityType | "worklog-summary" | "knowledge-summary";
 
 const WORK_DONE_ROOT_TITLE = "Work Done";
 
@@ -146,8 +147,8 @@ function mergeWorkLogs(base: WorkLog[], overlays: WorkLog[]): WorkLog[] {
 export class NativeNotionProvider implements AppDataProvider {
   readonly mode = "notion" as const;
   private readonly dataSourceIds = new Map<SyncEntityType, string>();
-  private readonly readCache = new Map<SyncEntityType, CachedRead>();
-  private readonly readsInFlight = new Map<SyncEntityType, Promise<NativeEntity[]>>();
+  private readonly readCache = new Map<ReadCacheKey, CachedRead>();
+  private readonly readsInFlight = new Map<ReadCacheKey, Promise<NativeEntity[]>>();
   private activeBlockReads = 0;
   private readonly blockReadWaiters: Array<() => void> = [];
   private workDoneRootPagePromise: Promise<string | null> | null = null;
@@ -199,7 +200,7 @@ export class NativeNotionProvider implements AppDataProvider {
   }
 
   private async cachedRead<T extends NativeEntity>(
-    type: SyncEntityType,
+    type: ReadCacheKey,
     ttlMs: number,
     load: () => Promise<T[]>,
   ): Promise<T[]> {
@@ -243,6 +244,8 @@ export class NativeNotionProvider implements AppDataProvider {
 
   private invalidateRead(type: SyncEntityType): void {
     this.readCache.delete(type);
+    if (type === "worklog") this.readCache.delete("worklog-summary");
+    if (type === "knowledge") this.readCache.delete("knowledge-summary");
   }
 
   private async withBlockReadSlot<T>(read: () => Promise<T>): Promise<T> {
@@ -396,22 +399,28 @@ export class NativeNotionProvider implements AppDataProvider {
     });
   }
 
+  private listStructuredWorkLogs(): Promise<WorkLog[]> {
+    return this.cachedRead("worklog-summary", 15_000, async () => {
+      const clientId = await this.defaultClientId();
+      return (await this.query("worklog")).map((page) => mapNotionWorkLog(page, {
+        clientId,
+        databaseId: this.databaseId("worklog"),
+      }));
+    });
+  }
+
   private listWorkLogs(): Promise<WorkLog[]> {
     return this.cachedRead("worklog", 15_000, async () => {
       const databaseStartedAt = Date.now();
-      const clientId = await this.defaultClientId();
-      const [dbPages, rootPageId] = await Promise.all([
-        this.query("worklog"),
+      const [dbLogs, rootPageId] = await Promise.all([
+        this.listStructuredWorkLogs(),
         this.workDoneRootPageId(),
       ]);
       const databaseMs = Date.now() - databaseStartedAt;
       // The database properties are the structured base record. Page-body
       // content is fetched only for dated Work Done overlays below, avoiding
       // a duplicate block-tree request for every database row.
-      const dbLogs = dbPages.map((page) => mapNotionWorkLog(page, {
-        clientId,
-        databaseId: this.databaseId("worklog"),
-      }));
+      const clientId = dbLogs[0]?.clientId ?? await this.defaultClientId();
 
       const discoveryStartedAt = Date.now();
       const childPages = rootPageId ? await this.collectChildPages(rootPageId) : [];
@@ -483,19 +492,17 @@ export class NativeNotionProvider implements AppDataProvider {
   }
 
   async knowledgeForReporting(): Promise<KnowledgePage[]> {
-    const startedAt = Date.now();
-    const clientId = await this.defaultClientId();
-    const pages = await this.query("knowledge");
-    const rows = pages.map((page) => mapNotionKnowledge(page, {
-      clientId,
-      databaseId: this.databaseId("knowledge"),
-    }));
-    console.info("[notion-read] completed", {
-      entity: "knowledge-summary",
-      durationMs: Date.now() - startedAt,
-      count: rows.length,
+    return this.cachedRead("knowledge-summary", 20_000, async () => {
+      const clientId = await this.defaultClientId();
+      return (await this.query("knowledge")).map((page) => mapNotionKnowledge(page, {
+        clientId,
+        databaseId: this.databaseId("knowledge"),
+      }));
     });
-    return rows;
+  }
+
+  async workLogsForSummary(): Promise<WorkLog[]> {
+    return this.listStructuredWorkLogs();
   }
 
   private listInvoices(): Promise<InvoiceReport[]> {
