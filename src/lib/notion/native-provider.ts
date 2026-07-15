@@ -1,4 +1,5 @@
 import type { Client as NotionClient } from "@notionhq/client";
+import { isValid, parse } from "date-fns";
 import type { NotionDatabaseMap } from "./config";
 import {
   hoursToNotionProperties,
@@ -30,6 +31,15 @@ import type {
 } from "@/types/domain";
 
 type NativeEntity = Client | Project | HoursEntry | WorkLog | KnowledgePage | InvoiceReport;
+type DiscoveredPage = {
+  id: string;
+  title: string;
+  url?: string;
+  created_time?: string;
+  last_edited_time?: string;
+};
+
+const WORK_DONE_ROOT_TITLE = "Work Done";
 
 function safeNotionError(error: unknown, action: string): DataProviderError {
   const message = error instanceof Error ? error.message : "Unknown Notion API error";
@@ -46,10 +56,93 @@ function notionResult<T extends NativeEntity>(entity: T, duplicatePrevented = fa
   };
 }
 
+function extractNotionText(value: unknown): string {
+  const prop = value as { title?: Array<{ plain_text?: string }> | string; rich_text?: Array<{ plain_text?: string }> | string };
+  if (typeof prop.title === "string") return prop.title;
+  if (typeof prop.rich_text === "string") return prop.rich_text;
+  if (Array.isArray(prop.title)) return prop.title.map((item) => item.plain_text ?? "").join("");
+  if (Array.isArray(prop.rich_text)) return prop.rich_text.map((item) => item.plain_text ?? "").join("");
+  return "";
+}
+
+function extractPageTitle(page: { properties?: Record<string, unknown> }): string {
+  const props = page.properties ?? {};
+  return (
+    extractNotionText(props.title) ||
+    extractNotionText(props.Title) ||
+    extractNotionText(props.Name) ||
+    ""
+  ).trim();
+}
+
+function normalizeWorkLogKey(date: string): string {
+  return date;
+}
+
+function parseWorkLogDate(title: string): string | null {
+  const parsed = parse(title.trim(), "MMMM d, yyyy", new Date());
+  return isValid(parsed) ? parsed.toISOString().slice(0, 10) : null;
+}
+
+function mergeWorkLogs(base: WorkLog[], overlays: WorkLog[]): WorkLog[] {
+  const merged = new Map<string, WorkLog>();
+
+  const upsert = (log: WorkLog) => {
+    const key = normalizeWorkLogKey(log.date);
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, log);
+      return;
+    }
+    const chooseText = (current: string, next: string) => (next.trim() ? next : current);
+    const chooseArray = <T,>(current: T[], next: T[]) => (next.length > 0 ? next : current);
+    const chooseId = (current: string | null | undefined, next: string | null | undefined) => next ?? current ?? null;
+    const chooseStatus = (current: WorkLog["status"], next: WorkLog["status"]) =>
+      current === "not-started" && next !== "not-started" ? next : current;
+    const choosePriority = (current: WorkLog["priority"], next: WorkLog["priority"]) =>
+      current === "medium" && next !== "medium" ? next : current;
+    merged.set(key, {
+      ...existing,
+      ...log,
+      id: existing.id,
+      notionPageId: existing.notionPageId ?? log.notionPageId,
+      notionDatabaseId: existing.notionDatabaseId ?? log.notionDatabaseId,
+      notionUrl: existing.notionUrl ?? log.notionUrl ?? null,
+      createdAt: existing.createdAt,
+      updatedAt: existing.updatedAt >= log.updatedAt ? existing.updatedAt : log.updatedAt,
+      summary: chooseText(existing.summary, log.summary),
+      detailedNotes: chooseText(existing.detailedNotes, log.detailedNotes),
+      invoiceDescription: chooseText(existing.invoiceDescription, log.invoiceDescription),
+      status: chooseStatus(existing.status, log.status),
+      priority: choosePriority(existing.priority, log.priority),
+      relatedHoursIds: chooseArray(existing.relatedHoursIds, log.relatedHoursIds),
+      relatedKnowledgeIds: chooseArray(existing.relatedKnowledgeIds, log.relatedKnowledgeIds),
+      evidence: chooseArray(existing.evidence, log.evidence),
+      githubLink: chooseId(existing.githubLink, log.githubLink),
+      attachments: chooseArray(existing.attachments, log.attachments),
+      detailedWorkDescription: chooseText(existing.detailedWorkDescription ?? "", log.detailedWorkDescription ?? ""),
+      internalNotes: chooseText(existing.internalNotes ?? "", log.internalNotes ?? ""),
+      clientVisible: existing.clientVisible ?? log.clientVisible,
+      includeInInvoice: existing.includeInInvoice ?? log.includeInInvoice,
+      includeInWorkReport: existing.includeInWorkReport ?? log.includeInWorkReport,
+      evidenceLinks: chooseArray(existing.evidenceLinks ?? [], log.evidenceLinks ?? []),
+      workLogId: chooseId(existing.workLogId ?? null, log.workLogId ?? null),
+      approvalStatus: existing.approvalStatus ?? log.approvalStatus ?? null,
+      invoiceReportId: chooseId(existing.invoiceReportId ?? null, log.invoiceReportId ?? null),
+      validationWarnings: [...new Set([...(existing.validationWarnings ?? []), ...(log.validationWarnings ?? [])])],
+    });
+  };
+
+  for (const log of base) upsert(log);
+  for (const log of overlays) upsert(log);
+  return [...merged.values()].sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
+}
+
 export class NativeNotionProvider implements AppDataProvider {
   readonly mode = "notion" as const;
   private clientsPromise: Promise<Client[]> | null = null;
   private readonly dataSourceIds = new Map<SyncEntityType, string>();
+  private workDoneRootPagePromise: Promise<string | null> | null = null;
 
   constructor(private readonly notion: NotionClient, private readonly databases: NotionDatabaseMap) {}
 
@@ -97,24 +190,96 @@ export class NativeNotionProvider implements AppDataProvider {
     }
   }
 
+  private async workDoneRootPageId(): Promise<string | null> {
+    this.workDoneRootPagePromise ??= (async () => {
+      try {
+        const response = await this.notion.search({
+          query: WORK_DONE_ROOT_TITLE,
+          filter: { property: "object", value: "page" },
+        });
+        for (const result of response.results as Array<{ id: string; properties?: Record<string, unknown> }>) {
+          const title = extractPageTitle(result);
+          if (title === WORK_DONE_ROOT_TITLE) return result.id;
+        }
+      } catch {
+        return null;
+      }
+      return null;
+    })();
+    return this.workDoneRootPagePromise;
+  }
+
+  private async collectChildPages(blockId: string, seen = new Set<string>()): Promise<DiscoveredPage[]> {
+    const pages: DiscoveredPage[] = [];
+    let cursor: string | undefined;
+    do {
+      const response = await this.notion.blocks.children.list({ block_id: blockId, start_cursor: cursor, page_size: 100 });
+      for (const block of response.results as Array<{ id: string; type: string; has_children?: boolean; [key: string]: unknown }>) {
+        if (block.type === "child_page") {
+          const child = block.child_page as { title?: string } | undefined;
+          const title = child?.title?.trim() ?? "";
+          if (!title || seen.has(block.id)) continue;
+          seen.add(block.id);
+          try {
+            const page = await this.notion.pages.retrieve({ page_id: block.id });
+            pages.push({
+              id: block.id,
+              title,
+              url: "url" in page ? (page.url as string | undefined) : undefined,
+              created_time: "created_time" in page ? (page.created_time as string | undefined) : undefined,
+              last_edited_time: "last_edited_time" in page ? (page.last_edited_time as string | undefined) : undefined,
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Unknown Notion API error";
+            console.warn("Skipping Work Done child page during discovery.", { pageId: block.id, reason: message.slice(0, 120) });
+          }
+          try {
+            const nested = await this.collectChildPages(block.id, seen);
+            pages.push(...nested);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Unknown Notion API error";
+            console.warn("Skipping nested Work Done child page branch.", { pageId: block.id, reason: message.slice(0, 120) });
+          }
+          continue;
+        }
+        if (block.has_children && block.type !== "child_page") {
+          try {
+            const nested = await this.collectChildPages(block.id, seen);
+            pages.push(...nested);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Unknown Notion API error";
+            console.warn("Skipping nested Work Done child page branch.", { pageId: block.id, reason: message.slice(0, 120) });
+          }
+        }
+      }
+      cursor = response.has_more ? response.next_cursor ?? undefined : undefined;
+    } while (cursor);
+    return pages;
+  }
+
   private async defaultClientId(): Promise<string> {
     return (await this.listClients())[0]?.id ?? "";
   }
 
   private async pageContent(pageId: string): Promise<string> {
     const lines: string[] = [];
-    let cursor: string | undefined;
-    try {
+    const visit = async (blockId: string): Promise<void> => {
+      let cursor: string | undefined;
       do {
-        const response = await this.notion.blocks.children.list({ block_id: pageId, start_cursor: cursor, page_size: 100 });
-        for (const block of response.results) {
-          if (!("type" in block)) continue;
-          const value = block[block.type as keyof typeof block] as { rich_text?: Array<{ plain_text?: string }> } | undefined;
-          const line = value?.rich_text?.map((item) => item.plain_text ?? "").join("").trim();
+        const response = await this.notion.blocks.children.list({ block_id: blockId, start_cursor: cursor, page_size: 100 });
+        for (const block of response.results as Array<{ id: string; type: string; has_children?: boolean; [key: string]: unknown }>) {
+          if (block.type === "child_page") continue;
+          const value = block[block.type as keyof typeof block] as { rich_text?: Array<{ plain_text?: string }>; title?: Array<{ plain_text?: string }> } | undefined;
+          const richText = value?.rich_text ?? value?.title;
+          const line = Array.isArray(richText) ? richText.map((item) => item.plain_text ?? "").join("").trim() : "";
           if (line) lines.push(line);
+          if (block.has_children) await visit(block.id);
         }
         cursor = response.has_more ? response.next_cursor ?? undefined : undefined;
       } while (cursor);
+    };
+    try {
+      await visit(pageId);
       return lines.join("\n\n");
     } catch {
       return "";
@@ -155,7 +320,48 @@ export class NativeNotionProvider implements AppDataProvider {
 
   private async listWorkLogs(): Promise<WorkLog[]> {
     const clientId = await this.defaultClientId();
-    return (await this.query("worklog")).map((page) => mapNotionWorkLog(page, { clientId, databaseId: this.databaseId("worklog") }));
+    const dbPages = await this.query("worklog");
+    const dbLogs = await Promise.all(dbPages.map(async (page) => mapNotionWorkLog(page, {
+      clientId,
+      databaseId: this.databaseId("worklog"),
+      pageContent: await this.pageContent(page.id),
+    })));
+
+    const rootPageId = await this.workDoneRootPageId();
+    const childPages = rootPageId ? await this.collectChildPages(rootPageId) : [];
+    const childLogs = await Promise.allSettled(childPages
+      .filter((page) => Boolean(parseWorkLogDate(page.title)))
+      .map(async (page) => {
+        const date = parseWorkLogDate(page.title);
+        if (!date) return null;
+        const content = await this.pageContent(page.id);
+        const syntheticPage: NotionPageLike = {
+          id: page.id,
+          url: page.url,
+          created_time: page.created_time,
+          last_edited_time: page.last_edited_time,
+          properties: {
+            Title: { title: [{ plain_text: page.title }] },
+            Date: { date: { start: date } },
+          },
+        };
+        return mapNotionWorkLog(syntheticPage, {
+          clientId,
+          databaseId: this.databaseId("worklog"),
+          pageContent: content,
+        });
+      }));
+
+    const overlays: WorkLog[] = [];
+    for (const settled of childLogs) {
+      if (settled.status === "fulfilled" && settled.value) overlays.push(settled.value);
+      if (settled.status === "rejected") {
+        const reason = settled.reason instanceof Error ? settled.reason.message : "Unknown child-page parsing error";
+        console.warn("Skipping Work Done child page during Notion read.", { reason: reason.slice(0, 120) });
+      }
+    }
+
+    return mergeWorkLogs(dbLogs, overlays);
   }
 
   private async listKnowledge(): Promise<KnowledgePage[]> {
