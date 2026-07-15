@@ -14,7 +14,10 @@ export async function GET() {
     const provider = await getDataProvider();
     const client = (await provider.clients.list())[0];
     const invoices = client ? (await provider.invoices.list()).filter((invoice) => invoice.clientId === client.id) : [];
-    return NextResponse.json(invoices.sort((a, b) => b.periodEnd.localeCompare(a.periodEnd)), { headers: NO_STORE_HEADERS });
+    const payload = invoices
+      .sort((a, b) => b.periodEnd.localeCompare(a.periodEnd))
+      .map((invoice) => ({ ...invoice, clientName: client?.name ?? "Unknown client" }));
+    return NextResponse.json(payload, { headers: NO_STORE_HEADERS });
   } catch (error) { return dataErrorResponse(error); }
 }
 export async function POST(request: NextRequest) {

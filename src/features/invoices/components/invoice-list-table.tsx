@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { useQuery } from "@tanstack/react-query";
 import {
   Table,
   TableBody,
@@ -11,9 +10,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { apiGet } from "@/lib/api-client/http";
 import { formatCurrency, formatHours } from "@/lib/calculations";
-import type { Client, InvoiceReport } from "@/types/domain";
+import type { InvoiceReport } from "@/types/domain";
+import type { InvoiceListItem } from "../api";
 import { InvoiceStatusBadge } from "./invoice-status-badge";
 
 function fmtDate(iso: string): string {
@@ -30,14 +29,7 @@ function notionUrl(invoice: InvoiceReport): string | null {
   return `https://www.notion.so/${invoice.notionPageId.replace(/-/g, "")}`;
 }
 
-export function InvoiceListTable({ invoices }: { invoices: InvoiceReport[] }) {
-  const clientsQuery = useQuery({
-    queryKey: ["clients"],
-    queryFn: () => apiGet<Client[]>("/api/clients"),
-  });
-  const clientName = (clientId: string) =>
-    clientsQuery.data?.find((client) => client.id === clientId)?.name ?? "—";
-
+export function InvoiceListTable({ invoices }: { invoices: InvoiceListItem[] }) {
   if (invoices.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed py-16 text-center">
@@ -76,7 +68,7 @@ export function InvoiceListTable({ invoices }: { invoices: InvoiceReport[] }) {
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   <Link href={`/invoices/${invoice.id}`} className="block">
-                    {clientName(invoice.clientId)}
+                    {invoice.clientName}
                   </Link>
                 </TableCell>
                 <TableCell className="text-muted-foreground">

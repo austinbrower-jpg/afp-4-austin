@@ -10,12 +10,21 @@ const childPageBlock = (id: string, pageTitle: string) => ({ object: "block", id
 const paragraphBlock = (value: string) => ({ object: "block", id: `p-${value.slice(0, 8)}`, type: "paragraph", has_children: false, paragraph: { rich_text: [{ plain_text: value }] } });
 const headingBlock = (value: string) => ({ object: "block", id: `h-${value.slice(0, 8)}`, type: "heading_2", has_children: false, heading_2: { rich_text: [{ plain_text: value }] } });
 
-function mockNotion(options: { clients?: unknown[]; hours?: unknown[]; queryError?: Error } = {}) {
+function mockNotion(options: {
+  clients?: unknown[];
+  hours?: unknown[];
+  worklogs?: unknown[];
+  knowledge?: unknown[];
+  queryError?: Error;
+} = {}) {
   const clientPage = { object: "page", id: "client-page", properties: { Name: title("Anytime Fuel Pros"), Status: { select: { name: "active" } }, "Default Hourly Rate": { number: 30 }, Color: text("#6366f1"), Timezone: text("America/Chicago"), Notes: text("") } };
   const queries: Record<string, unknown[]> = {
     "clients-source": options.clients ?? [clientPage],
     "hours-source": options.hours ?? [],
-    "projects-source": [], "worklogs-source": [], "knowledge-source": [], "invoices-source": [],
+    "projects-source": [],
+    "worklogs-source": options.worklogs ?? [],
+    "knowledge-source": options.knowledge ?? [],
+    "invoices-source": [],
   };
   const notion = {
     databases: { retrieve: vi.fn(async ({ database_id }: { database_id: string }) => ({ data_sources: [{ id: `${database_id}-source` }] })) },
@@ -76,6 +85,40 @@ describe("NativeNotionProvider", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: "hours-page", clientId: "client-page", date: "2026-07-10" });
     expect(notion.dataSources.query).toHaveBeenCalled();
+  });
+
+  it("caches lightweight Work Done and knowledge projections without crawling page bodies", async () => {
+    const worklogPage = {
+      object: "page",
+      id: "worklog-page",
+      properties: {
+        Title: title("Structured work log"),
+        Date: date("2026-07-15"),
+        Status: { select: { name: "done" } },
+        Priority: { select: { name: "medium" } },
+      },
+    };
+    const knowledgePage = {
+      object: "page",
+      id: "knowledge-page",
+      properties: {
+        Title: title("Runbook"),
+        Type: { select: { name: "documentation" } },
+        Tags: { multi_select: [] },
+      },
+    };
+    const notion = mockNotion({ worklogs: [worklogPage], knowledge: [knowledgePage] });
+    const provider = new NativeNotionProvider(notion as unknown as NotionClient, databases);
+
+    await Promise.all([provider.workLogsForSummary(), provider.knowledgeForReporting()]);
+    await Promise.all([provider.workLogsForSummary(), provider.knowledgeForReporting()]);
+
+    const queriesFor = (source: string) => notion.dataSources.query.mock.calls.filter(
+      ([request]) => (request as { data_source_id: string }).data_source_id === source,
+    );
+    expect(queriesFor("worklogs-source")).toHaveLength(1);
+    expect(queriesFor("knowledge-source")).toHaveLength(1);
+    expect(notion.blocks.children.list).not.toHaveBeenCalled();
   });
 
   it("prevents duplicate hours without issuing a Notion create", async () => {

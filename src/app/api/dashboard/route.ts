@@ -13,8 +13,11 @@ const PRIORITY: Record<Priority, number> = { urgent: 4, high: 3, medium: 2, low:
 export async function GET() {
   try {
     const provider = await getDataProvider();
+    const knowledgeForSummary = provider.knowledgeForReporting
+      ? provider.knowledgeForReporting()
+      : provider.knowledge.list();
     const [workspace, clients, projects, hours, workLogs, knowledge, invoices] = await Promise.all([
-      provider.workspace(), provider.clients.list(), provider.projects.list(), provider.hours.list(), provider.workLogs.list(), provider.knowledge.list(), provider.invoices.list(),
+      provider.workspace(), provider.clients.list(), provider.projects.list(), provider.hours.list(), provider.workLogs.list(), knowledgeForSummary, provider.invoices.list(),
     ]);
     const client = clients[0] ?? null;
     const clientHours = operationalHours(client ? hours.filter((entry) => entry.clientId === client.id) : hours);

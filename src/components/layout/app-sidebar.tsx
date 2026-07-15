@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { Briefcase } from "lucide-react";
+import { Briefcase, LoaderCircle } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -39,17 +39,31 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function NavLink({ item, pathname }: { item: NavLeaf; pathname: string }) {
+function NavLinkContent({ item }: { item: NavLeaf }) {
+  const { pending } = useLinkStatus();
   const Icon = item.icon;
+
+  return (
+    <>
+      <Icon />
+      <span>{item.title}</span>
+      <span className="ml-auto flex size-3.5 shrink-0 items-center justify-center" aria-hidden>
+        {pending && <LoaderCircle className="size-3.5 animate-spin" />}
+      </span>
+      {pending && <span className="sr-only">Loading {item.title}</span>}
+    </>
+  );
+}
+
+function NavLink({ item, pathname }: { item: NavLeaf; pathname: string }) {
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         isActive={isActive(pathname, item.href)}
         tooltip={item.title}
         render={
-          <Link href={item.href}>
-            <Icon />
-            <span>{item.title}</span>
+          <Link href={item.href} prefetch="auto">
+            <NavLinkContent item={item} />
           </Link>
         }
       />

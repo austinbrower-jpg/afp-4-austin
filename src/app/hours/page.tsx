@@ -6,8 +6,11 @@ import { NotionSourceBanner } from "@/components/shared/notion-source-banner";
 export default async function HoursPage() {
   await connection();
   const provider = await getDataProvider();
+  const workLogsForSummary = provider.workLogsForSummary
+    ? provider.workLogsForSummary()
+    : provider.workLogs.list();
   const [clients, projects, workLogs] = await Promise.all([
-    provider.clients.list(), provider.projects.list(), provider.workLogs.list(),
+    provider.clients.list(), provider.projects.list(), workLogsForSummary,
   ]);
   const client = clients[0];
   return (

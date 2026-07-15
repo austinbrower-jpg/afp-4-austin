@@ -151,6 +151,20 @@ describe("Hours route activation policy", () => {
     expect(body[0]).toMatchObject({ id: saved.id, clientId: "", notes: saved.notes });
   });
 
+  it("uses lightweight Work Done rows for relation labels", async () => {
+    const saved = hoursEntry();
+    const { provider } = providerWith({ mode: "notion", hours: [saved] });
+    const workLogsForSummary = vi.fn(async () => []);
+    provider.workLogsForSummary = workLogsForSummary;
+    providerMocks.getDataProvider.mockResolvedValue(provider);
+
+    const response = await GET(new NextRequest("http://localhost/api/hours"));
+
+    expect(response.status).toBe(200);
+    expect(workLogsForSummary).toHaveBeenCalledTimes(1);
+    expect(provider.workLogs.list).not.toHaveBeenCalled();
+  });
+
   it("continues to require a Client in mock mode", async () => {
     const { provider, hoursCreate } = providerWith({ mode: "mock" });
     providerMocks.getDataProvider.mockResolvedValue(provider);
